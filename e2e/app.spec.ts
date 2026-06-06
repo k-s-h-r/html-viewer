@@ -239,6 +239,51 @@ test.describe("HTML Viewer", () => {
     }
   });
 
+  test("results pane scrolls when search hits overflow", async () => {
+    const { electronApp, window, userDataDir } = await launchApp();
+
+    try {
+      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+
+      await window.getByPlaceholder(/検索/).fill("仕様");
+      await expect(window.getByTestId("results-pane")).toBeVisible();
+      await expect(window.getByTestId("results-total")).not.toHaveText("0 件");
+
+      const scrollMetrics = await window.getByTestId("results-scroll").evaluate((root) => {
+        const viewport = root.querySelector('[data-slot="scroll-area-viewport"]');
+        if (!(viewport instanceof HTMLElement)) {
+          return { scrollHeight: 0, clientHeight: 0 };
+        }
+        return { scrollHeight: viewport.scrollHeight, clientHeight: viewport.clientHeight };
+      });
+
+      expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight);
+
+      const scrollTopBefore = await window.getByTestId("results-scroll").evaluate((root) => {
+        const viewport = root.querySelector('[data-slot="scroll-area-viewport"]');
+        return viewport instanceof HTMLElement ? viewport.scrollTop : 0;
+      });
+
+      await window.getByTestId("results-scroll").evaluate((root) => {
+        const viewport = root.querySelector('[data-slot="scroll-area-viewport"]');
+        if (viewport instanceof HTMLElement) {
+          viewport.scrollTop = viewport.scrollHeight;
+        }
+      });
+
+      const scrollTopAfter = await window.getByTestId("results-scroll").evaluate((root) => {
+        const viewport = root.querySelector('[data-slot="scroll-area-viewport"]');
+        return viewport instanceof HTMLElement ? viewport.scrollTop : 0;
+      });
+
+      expect(scrollTopAfter).toBeGreaterThan(scrollTopBefore);
+      await expectUiIntact(window, electronApp);
+    } finally {
+      await electronApp.close();
+      await rm(userDataDir, { recursive: true, force: true });
+    }
+  });
+
   test("zoom applies only to BrowserView, not the app chrome", async () => {
     const { electronApp, window, userDataDir } = await launchApp();
 
