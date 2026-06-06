@@ -471,7 +471,7 @@ export default function App() {
         {!focusMode ? (
           <header
             data-testid="toolbar"
-            className="flex h-14 shrink-0 items-center gap-2 border-b bg-background px-3"
+            className="flex h-16 shrink-0 items-center gap-2 border-b bg-background px-3"
           >
             <div className="flex items-center gap-1.5">
               <Button size="sm" onClick={openFolder}>
@@ -491,7 +491,7 @@ export default function App() {
                     </Button>
                   }
                 />
-                <DropdownMenuContent align="start" side="top" className="w-64">
+                <DropdownMenuContent align="center" side="top" className="w-64">
                   <DropdownMenuGroup>
                     <DropdownMenuLabel>最近使ったフォルダ</DropdownMenuLabel>
                     {recentFolders.map((folder) => (
@@ -508,7 +508,7 @@ export default function App() {
               </DropdownMenu>
             </div>
 
-            <Separator orientation="vertical" className="mx-1 h-6" />
+            <Separator orientation="vertical" className="mx-1 h-6 my-auto" />
 
             <div className="flex min-w-[320px] flex-1 items-center gap-1.5">
               <div className="relative flex-1">
@@ -599,7 +599,7 @@ export default function App() {
               </Button>
             </div>
 
-            <Separator orientation="vertical" className="mx-1 h-6" />
+            <Separator orientation="vertical" className="mx-1 h-6 my-auto" />
 
             <div className="flex items-center gap-1.5">
               <Button
@@ -624,7 +624,7 @@ export default function App() {
                 <ChevronRight />
               </Button>
 
-              <Separator orientation="vertical" className="mx-1 h-6" />
+              <Separator orientation="vertical" className="mx-1 h-6 my-auto" />
 
               <Button
                 variant="ghost"
