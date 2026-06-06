@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>検索</title>
+    <link rel="stylesheet" href="../assets/styles.css" />
+  </head>
+  <body>
+    <article class="slide">
+      <h1>検索</h1>
+      <section id="catalog">
+        <h2>全ページカタログ</h2>
+        <p>
+          main プロセスがHTML本文を読み取り、ページ別のヒット件数と抜粋をメモリ上に構築します。
+          検索語の大文字小文字を区別するかどうかはツールバーで切り替えられます。
+        </p>
+      </section>
+      <section id="in-page">
+        <h2>ページ内検索</h2>
+        <p>
+          表示中のページでは Chromium の findInPage を使ってハイライトします。
+          details 要素などの標準挙動はブラウザに任せます。
+        </p>
+        <details>
+          <summary>details 内の検索サンプル</summary>
+          <p>折りたたみ領域にある語句も、ブラウザ標準検索の対象です。</p>
+        </details>
+      </section>
+      <p><a href="../intro.html">概要に戻る</a></p>
+    </article>
+  </body>
+</html>
