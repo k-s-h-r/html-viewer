@@ -78,6 +78,14 @@ function setBrowserZoomFactor(factor: number): void {
   sendToRenderer("viewer:zoom-changed", zoomFactor);
 }
 
+function lockRendererZoom(window: BrowserWindow): void {
+  window.webContents.setZoomFactor(1);
+  window.webContents.setVisualZoomLevelLimits(1, 1);
+  window.webContents.on("zoom-changed", () => {
+    window.webContents.setZoomFactor(1);
+  });
+}
+
 function adjustBrowserZoom(delta: number): void {
   setBrowserZoomFactor(zoomFactor + delta);
 }
@@ -228,6 +236,7 @@ async function createMainWindow(): Promise<void> {
     `file://${path.join(__dirname, "../../dist/index.html")}`;
 
   await mainWindow.loadURL(rendererUrl);
+  lockRendererZoom(mainWindow);
 }
 
 async function stopLocalServer(): Promise<void> {
