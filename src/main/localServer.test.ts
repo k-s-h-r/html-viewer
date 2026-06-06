@@ -68,6 +68,22 @@ describe("startLocalServer", () => {
     expect(status).toBe(403);
   });
 
+  it("serves video files with automatic mime types", async () => {
+    const tmpDir = await mkdtemp(path.join(os.tmpdir(), "html-viewer-"));
+
+    try {
+      await writeFile(path.join(tmpDir, "clip.mp4"), "fake-video");
+
+      server = await startLocalServer(tmpDir);
+      const response = await fetch(server.toUrl("clip.mp4"));
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe("video/mp4");
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects symlink escapes outside the root", async () => {
     const tmpDir = await mkdtemp(path.join(os.tmpdir(), "html-viewer-"));
     const secretFile = path.join(tmpDir, "secret.txt");

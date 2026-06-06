@@ -1,25 +1,10 @@
 import { createServer, type Server } from "node:http";
-import { createReadStream } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
+import { lookup as lookupMime } from "mrmime";
+import sirv from "sirv";
 
-const MIME_TYPES: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".htm": "text/html; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".svg": "image/svg+xml",
-  ".webp": "image/webp",
-  ".ico": "image/x-icon",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2"
-};
+const SIRV_EXTENSIONS = ["html", "htm"];
 
 export interface LocalServerHandle {
   rootDir: string;
@@ -27,6 +12,11 @@ export interface LocalServerHandle {
   stop(): Promise<void>;
   toUrl(href: string): string;
 }
+
+type ResolveResult =
+  | { kind: "file"; filePath: string }
+  | { kind: "not_found" }
+  | { kind: "forbidden" };
 
 function isInsideRoot(rootDir: string, targetPath: string): boolean {
   const relative = path.relative(rootDir, targetPath);
@@ -53,6 +43,96 @@ function resolveRequestPath(rootDir: string, requestUrl: string): string | null 
   return targetPath;
 }
 
+function pathnameFromRequestUrl(requestUrl: string): string | null {
+  try {
+    const url = new URL(requestUrl, "http://127.0.0.1");
+    let pathname = url.pathname;
+
+    if (pathname.includes("%")) {
+      try {
+        pathname = decodeURI(pathname);
+      } catch {
+        return null;
+      }
+    }
+
+    return pathname;
+  } catch {
+    return null;
+  }
+}
+
+function toAssume(uri: string, extensions: string[]): string[] {
+  let normalizedUri = uri;
+  const len = normalizedUri.length - 1;
+
+  if (normalizedUri.charCodeAt(len) === 47) {
+    normalizedUri = normalizedUri.substring(0, len);
+  }
+
+  const candidates: string[] = [];
+  const indexBase = `${normalizedUri}/index`;
+
+  for (const extension of extensions) {
+    const suffix = extension ? `.${extension}` : "";
+
+    if (normalizedUri) {
+      candidates.push(`${normalizedUri}${suffix}`);
+    }
+
+    candidates.push(`${indexBase}${suffix}`);
+  }
+
+  return candidates;
+}
+
+async function resolveSafeFile(rootDir: string, requestUrl: string): Promise<ResolveResult> {
+  if (!resolveRequestPath(rootDir, requestUrl)) {
+    return { kind: "forbidden" };
+  }
+
+  const pathname = pathnameFromRequestUrl(requestUrl);
+  if (!pathname) {
+    return { kind: "forbidden" };
+  }
+
+  for (const candidate of toAssume(pathname, ["", ...SIRV_EXTENSIONS])) {
+    const relativePath = candidate.replace(/^[/\\]+/, "");
+    const targetPath = path.resolve(rootDir, relativePath);
+
+    if (!isInsideRoot(rootDir, targetPath)) {
+      continue;
+    }
+
+    try {
+      const fileStat = await stat(targetPath);
+      if (fileStat.isDirectory()) {
+        continue;
+      }
+
+      const [realRootDir, realFilePath] = await Promise.all([
+        realpath(rootDir),
+        realpath(targetPath)
+      ]);
+
+      if (!isInsideRoot(realRootDir, realFilePath)) {
+        return { kind: "forbidden" };
+      }
+
+      return { kind: "file", filePath: targetPath };
+    } catch {
+      continue;
+    }
+  }
+
+  return { kind: "not_found" };
+}
+
+function contentTypeForFile(filePath: string): string {
+  const mimeType = lookupMime(path.extname(filePath)) ?? "application/octet-stream";
+  return mimeType === "text/html" ? `${mimeType};charset=utf-8` : mimeType;
+}
+
 async function closeServer(server: Server): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {
@@ -66,6 +146,16 @@ async function closeServer(server: Server): Promise<void> {
 }
 
 export async function startLocalServer(rootDir: string): Promise<LocalServerHandle> {
+  const serve = sirv(rootDir, {
+    dev: false,
+    etag: true,
+    dotfiles: false,
+    extensions: SIRV_EXTENSIONS,
+    setHeaders(response) {
+      response.setHeader("X-Content-Type-Options", "nosniff");
+    }
+  });
+
   const server = createServer(async (request, response) => {
     if (!request.url || !request.method || !["GET", "HEAD"].includes(request.method)) {
       response.writeHead(405);
@@ -73,55 +163,32 @@ export async function startLocalServer(rootDir: string): Promise<LocalServerHand
       return;
     }
 
-    const resolvedPath = resolveRequestPath(rootDir, request.url);
-    if (!resolvedPath) {
+    const resolved = await resolveSafeFile(rootDir, request.url);
+
+    if (resolved.kind === "forbidden") {
       response.writeHead(403);
       response.end("Forbidden");
       return;
     }
 
-    try {
-      const fileStat = await stat(resolvedPath);
-      const filePath = fileStat.isDirectory()
-        ? path.join(resolvedPath, "index.html")
-        : resolvedPath;
-      const finalStat = fileStat.isDirectory() ? await stat(filePath) : fileStat;
-
-      if (!finalStat.isFile() || !isInsideRoot(rootDir, filePath)) {
+    if (request.method === "HEAD") {
+      if (resolved.kind === "not_found") {
         response.writeHead(404);
         response.end("Not Found");
         return;
       }
 
-      const [realRootDir, realFilePath] = await Promise.all([
-        realpath(rootDir),
-        realpath(filePath)
-      ]);
-      if (!isInsideRoot(realRootDir, realFilePath)) {
-        response.writeHead(403);
-        response.end("Forbidden");
-        return;
-      }
-
-      const contentType =
-        MIME_TYPES[path.extname(filePath).toLowerCase()] ?? "application/octet-stream";
-
+      const fileStat = await stat(resolved.filePath);
       response.writeHead(200, {
-        "Content-Type": contentType,
-        "Content-Length": finalStat.size,
+        "Content-Type": contentTypeForFile(resolved.filePath),
+        "Content-Length": fileStat.size,
         "X-Content-Type-Options": "nosniff"
       });
-
-      if (request.method === "HEAD") {
-        response.end();
-        return;
-      }
-
-      createReadStream(filePath).pipe(response);
-    } catch {
-      response.writeHead(404);
-      response.end("Not Found");
+      response.end();
+      return;
     }
+
+    serve(request, response);
   });
 
   await new Promise<void>((resolve, reject) => {
