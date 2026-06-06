@@ -671,7 +671,7 @@ export default function App() {
 
         <main className={cn("flex min-h-0 flex-1 gap-3", focusMode ? "p-0" : "p-3")}>
           {showSidebar ? (
-            <aside className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+            <aside className="flex w-72 shrink-0 flex-col overflow-hidden border bg-card">
               <div className="flex items-baseline justify-between gap-2 border-b px-4 py-3">
                 <span className="truncate text-sm font-semibold">
                   {deck?.rootName ?? "仕様書未選択"}
@@ -776,7 +776,7 @@ export default function App() {
           <section
             className={cn(
               "relative min-h-0 min-w-0 flex-1 overflow-hidden border bg-card",
-              focusMode ? "rounded-none border-0" : "rounded-xl shadow-sm"
+              focusMode && "border-0"
             )}
           >
             {!deck ? (
