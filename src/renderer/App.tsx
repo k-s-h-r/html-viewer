@@ -151,7 +151,6 @@ export default function App() {
     if (!input) {
       return;
     }
-    input.click();
     input.focus({ preventScroll: true });
     input.select();
   }, []);
@@ -170,8 +169,7 @@ export default function App() {
 
   const ensureSearchInputFocused = useCallback(async () => {
     await window.viewerApi.focusSearch(getSearchInputPoint());
-    focusSearchInput();
-  }, [focusSearchInput, getSearchInputPoint]);
+  }, [getSearchInputPoint]);
 
   const beginFind = useCallback(
     (query = submittedQuery, forward = true) => {
@@ -318,9 +316,7 @@ export default function App() {
 
       if (pagePath === selectedPath) {
         beginFind(submittedQuery, forward);
-        window.setTimeout(() => {
-          void ensureSearchInputFocused();
-        }, 50);
+        await ensureSearchInputFocused();
       } else {
         await navigateTo(page, page.href, forward);
         await ensureSearchInputFocused();
@@ -382,10 +378,7 @@ export default function App() {
     });
     const cleanupFind = window.viewerApi.onFindResult(setFindResult);
     const cleanupZoom = window.viewerApi.onZoomChanged(setZoom);
-    const cleanupFocusSearch = window.viewerApi.onFocusSearch(() => {
-      focusSearchInput();
-      window.requestAnimationFrame(focusSearchInput);
-    });
+    const cleanupFocusSearch = window.viewerApi.onFocusSearch(focusSearchInput);
 
     return () => {
       cleanupDeck();
@@ -412,10 +405,6 @@ export default function App() {
       window.removeEventListener("resize", reportViewBounds);
     };
   }, [reportViewBounds, sidebarVisible, resultsPaneVisible, focusMode, submittedQuery]);
-
-  useEffect(() => {
-    return window.viewerApi.onDocumentVisibilityRestored(reportViewBounds);
-  }, [reportViewBounds]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

@@ -37,7 +37,6 @@ let searchCatalog: SearchCatalog | null = null;
 let recentFolders: RecentFolder[] = [];
 let zoomFactor = 1;
 let isStoppingForQuit = false;
-let searchFocusLockUntil = 0;
 
 function recentFoldersPath(): string {
   return path.join(app.getPath("userData"), "recent-folders.json");
@@ -194,36 +193,16 @@ async function focusSearchInRenderer(clickPoint?: InputPoint): Promise<void> {
     return;
   }
 
-  searchFocusLockUntil = Date.now() + 800;
-  documentView?.setVisible(false);
-
-  void documentView?.webContents.executeJavaScript(
-    "document.activeElement?.blur(); window.getSelection()?.removeAllRanges();",
-    true
-  );
-
   if (process.platform === "darwin") {
     app.focus({ steal: true });
   }
   mainWindow.focus();
   mainWindow.webContents.focus();
 
-  await new Promise<void>((resolve) => {
-    setImmediate(() => {
-      documentView?.setVisible(true);
-      sendToRenderer("viewer:document-visibility-restored", null);
-      if (clickPoint) {
-        setTimeout(() => {
-          clickRendererPoint(clickPoint);
-          sendToRenderer("viewer:focus-search", null);
-          resolve();
-        }, 0);
-        return;
-      }
-      sendToRenderer("viewer:focus-search", null);
-      resolve();
-    });
-  });
+  if (clickPoint) {
+    clickRendererPoint(clickPoint);
+  }
+  sendToRenderer("viewer:focus-search", null);
 }
 
 function registerDocumentFocusSearchShortcut(contents: Electron.WebContents): void {
@@ -235,23 +214,6 @@ function registerDocumentFocusSearchShortcut(contents: Electron.WebContents): vo
       event.preventDefault();
       setTimeout(() => focusSearchInRenderer(), 0);
     }
-  });
-
-  contents.on("focus", () => {
-    if (Date.now() >= searchFocusLockUntil) {
-      return;
-    }
-    setImmediate(() => {
-      if (!mainWindow || mainWindow.isDestroyed()) {
-        return;
-      }
-      if (process.platform === "darwin") {
-        app.focus({ steal: true });
-      }
-      mainWindow.focus();
-      mainWindow.webContents.focus();
-      sendToRenderer("viewer:focus-search", null);
-    });
   });
 }
 

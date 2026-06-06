@@ -106,5 +106,4 @@ export interface ViewerApi {
   onFindResult(callback: (result: FindResult) => void): () => void;
   onZoomChanged(callback: (factor: number) => void): () => void;
   onFocusSearch(callback: () => void): () => void;
-  onDocumentVisibilityRestored(callback: () => void): () => void;
 }
