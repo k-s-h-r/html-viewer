@@ -17,8 +17,8 @@ function htmlToText(html: string): string {
 }
 
 function makeSnippet(text: string, index: number, length: number): string {
-  const start = Math.max(0, index - 48);
-  const end = Math.min(text.length, index + length + 72);
+  const start = Math.max(0, index - 20);
+  const end = Math.min(text.length, index + length + 28);
   const prefix = start > 0 ? "..." : "";
   const suffix = end < text.length ? "..." : "";
   return `${prefix}${text.slice(start, end)}${suffix}`;

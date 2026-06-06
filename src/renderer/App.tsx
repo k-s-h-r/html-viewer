@@ -15,6 +15,8 @@ import {
   Minimize2,
   Minus,
   PanelLeft,
+  PanelRight,
+  PanelRightClose,
   Plus,
   Search,
   X
@@ -48,12 +50,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { formatGlobalFindCounter } from "./searchCounter";
+import { highlightQueryInText } from "./searchSnippet";
 
 const EMPTY_SEARCH: SearchResult = {
   query: "",
   matchCase: false,
   totalHits: 0,
   pages: []
+};
+
+type ActiveSearchTarget = {
+  pagePath: string;
+  ordinal: number;
 };
 
 type PendingFindTarget = {
@@ -113,6 +121,7 @@ export default function App() {
   const [zoom, setZoom] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [matchCase, setMatchCase] = useState(false);
+  const [resultsPaneVisible, setResultsPaneVisible] = useState(true);
   const [searchResult, setSearchResult] = useState<SearchResult>(EMPTY_SEARCH);
   const [findResult, setFindResult] = useState<FindResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -120,6 +129,9 @@ export default function App() {
   const viewerHostRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const pendingFindTargetRef = useRef<PendingFindTarget | null>(null);
+  const activeSearchTargetRef = useRef<ActiveSearchTarget | null>(null);
+  const findOrdinalRunIdRef = useRef(0);
+  const findOrdinalTimeoutsRef = useRef<number[]>([]);
 
   const navigablePages = useMemo(
     () => deck?.pages.filter((page) => page.kind === "page") ?? [],
@@ -164,6 +176,8 @@ export default function App() {
   }, [deck]);
 
   const navigateTo = useCallback(async (page: DeckPage, href = page.href) => {
+    activeSearchTargetRef.current = null;
+
     if (!canNavigate(page)) {
       return;
     }
@@ -216,10 +230,20 @@ export default function App() {
 
   const runFindAtOrdinal = useCallback(
     (ordinal: number) => {
+      findOrdinalTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+      findOrdinalTimeoutsRef.current = [];
+
+      const runId = ++findOrdinalRunIdRef.current;
       runFind(true, false);
 
       for (let step = 1; step < ordinal; step += 1) {
-        window.setTimeout(() => runFind(true, true), step * 40);
+        const timeoutId = window.setTimeout(() => {
+          if (runId !== findOrdinalRunIdRef.current) {
+            return;
+          }
+          runFind(true, true);
+        }, step * 40);
+        findOrdinalTimeoutsRef.current.push(timeoutId);
       }
     },
     [runFind]
@@ -227,6 +251,17 @@ export default function App() {
 
   const navigateToSearchTarget = useCallback(
     (pagePath: string, direction: "first" | "last", ordinal?: number) => {
+      const targetOrdinal = ordinal ?? 1;
+      if (
+        selectedPath === pagePath &&
+        activeSearchTargetRef.current?.pagePath === pagePath &&
+        activeSearchTargetRef.current?.ordinal === targetOrdinal
+      ) {
+        return;
+      }
+
+      activeSearchTargetRef.current = { pagePath, ordinal: targetOrdinal };
+
       const page = deck?.pages.find((candidate) => candidate.path === pagePath);
       if (!page) {
         return;
@@ -325,7 +360,20 @@ export default function App() {
       observer.disconnect();
       window.removeEventListener("resize", reportViewBounds);
     };
-  }, [reportViewBounds, sidebarVisible, focusMode, searchQuery]);
+  }, [reportViewBounds, sidebarVisible, focusMode, searchQuery, resultsPaneVisible]);
+
+  useEffect(() => {
+    activeSearchTargetRef.current = null;
+    findOrdinalRunIdRef.current += 1;
+    findOrdinalTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    findOrdinalTimeoutsRef.current = [];
+  }, [searchQuery, matchCase]);
+
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setResultsPaneVisible(true);
+    }
+  }, [searchQuery]);
 
   useEffect(() => {
     const handle = window.setTimeout(async () => {
@@ -445,7 +493,8 @@ export default function App() {
   };
 
   const showSidebar = sidebarVisible && !focusMode;
-  const showResults = Boolean(searchQuery.trim());
+  const hasSearchQuery = Boolean(searchQuery.trim());
+  const showResultsPane = hasSearchQuery && resultsPaneVisible;
   const findCounter = useMemo(
     () => formatGlobalFindCounter(searchQuery, searchResult, selectedPath, findResult),
     [findResult, searchQuery, searchResult, selectedPath]
@@ -505,7 +554,7 @@ export default function App() {
                 <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   ref={searchInputRef}
-                  className="pl-8"
+                  className={cn("pl-8", (findCounter || hasSearchQuery) && "pr-16")}
                   placeholder="検索...  (Ctrl+F)"
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.currentTarget.value)}
@@ -519,10 +568,24 @@ export default function App() {
                 {findCounter ? (
                   <span
                     data-testid="find-counter"
-                    className="absolute top-1/2 right-2.5 -translate-y-1/2 text-xs tabular-nums text-muted-foreground"
+                    className={cn(
+                      "absolute top-1/2 -translate-y-1/2 text-xs tabular-nums text-muted-foreground",
+                      hasSearchQuery ? "right-8" : "right-2.5"
+                    )}
                   >
                     {findCounter}
                   </span>
+                ) : null}
+                {hasSearchQuery ? (
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label="検索をクリア"
+                    className="absolute top-1/2 right-1.5 -translate-y-1/2 text-muted-foreground"
+                    onClick={() => setSearchQuery("")}
+                  >
+                    <X />
+                  </Button>
                 ) : null}
               </div>
               <Tooltip>
@@ -543,7 +606,7 @@ export default function App() {
               <Button
                 variant="ghost"
                 size="icon-sm"
-                disabled={!showResults}
+                disabled={!hasSearchQuery}
                 aria-label="前のヒット"
                 onClick={() => navigateSearchAcrossPages(false)}
               >
@@ -552,12 +615,30 @@ export default function App() {
               <Button
                 variant="ghost"
                 size="icon-sm"
-                disabled={!showResults}
+                disabled={!hasSearchQuery}
                 aria-label="次のヒット"
                 onClick={() => navigateSearchAcrossPages(true)}
               >
                 <ChevronDown />
               </Button>
+              {hasSearchQuery ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant={resultsPaneVisible ? "secondary" : "ghost"}
+                        size="icon-sm"
+                        aria-pressed={resultsPaneVisible}
+                        aria-label="検索結果"
+                        onClick={() => setResultsPaneVisible((visible) => !visible)}
+                      >
+                        {resultsPaneVisible ? <PanelRightClose /> : <PanelRight />}
+                      </Button>
+                    }
+                  />
+                  <TooltipContent>検索結果</TooltipContent>
+                </Tooltip>
+              ) : null}
             </div>
 
             <Separator orientation="vertical" className="mx-1 h-6" />
@@ -819,16 +900,33 @@ export default function App() {
             ) : null}
           </section>
 
-          {showResults ? (
+          {showResultsPane ? (
             <aside
               data-testid="results-pane"
               className="flex min-h-0 w-80 shrink-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm"
             >
               <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
                 <span className="text-sm font-semibold">検索結果</span>
-                <Badge variant="secondary" data-testid="results-total">
-                  {searchResult.totalHits} 件
-                </Badge>
+                <div className="flex items-center gap-1">
+                  <Badge variant="secondary" data-testid="results-total">
+                    {searchResult.totalHits} 件
+                  </Badge>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label="結果ペインを閉じる"
+                          onClick={() => setResultsPaneVisible(false)}
+                        >
+                          <PanelRightClose />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent>結果ペインを閉じる</TooltipContent>
+                  </Tooltip>
+                </div>
               </div>
               {searchResult.pages.length > 0 ? (
                 <ScrollArea className="min-h-0 flex-1" data-testid="results-scroll">
@@ -858,9 +956,9 @@ export default function App() {
                             onClick={() =>
                               navigateToSearchTarget(hit.pagePath, "first", hit.ordinal)
                             }
-                            className="ml-2 rounded-md px-2.5 py-1.5 text-left text-xs leading-relaxed text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                            className="ml-2 line-clamp-2 rounded-md px-2.5 py-1.5 text-left text-xs leading-relaxed text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                           >
-                            {hit.snippet}
+                            {highlightQueryInText(hit.snippet, searchQuery, matchCase)}
                           </button>
                         ))}
                       </section>

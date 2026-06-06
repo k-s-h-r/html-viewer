@@ -244,6 +244,7 @@ test.describe("HTML Viewer", () => {
 
     try {
       await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+      await window.setViewportSize({ width: 1280, height: 620 });
 
       await window.getByPlaceholder(/検索/).fill("仕様");
       await expect(window.getByTestId("results-pane")).toBeVisible();
@@ -278,6 +279,39 @@ test.describe("HTML Viewer", () => {
 
       expect(scrollTopAfter).toBeGreaterThan(scrollTopBefore);
       await expectUiIntact(window, electronApp);
+    } finally {
+      await electronApp.close();
+      await rm(userDataDir, { recursive: true, force: true });
+    }
+  });
+
+  test("search area supports clear, minimize, highlight, and stable re-click", async () => {
+    const { electronApp, window, userDataDir } = await launchApp();
+
+    try {
+      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+
+      await window.getByPlaceholder(/検索/).fill("検索");
+      await expect(window.getByTestId("results-pane")).toBeVisible();
+      await expect(window.locator("mark").first()).toBeVisible();
+
+      await window.getByTestId("toolbar").getByRole("button", { name: "検索結果", exact: true }).click();
+      await expect(window.getByTestId("results-pane")).toBeHidden();
+
+      await window.getByTestId("toolbar").getByRole("button", { name: "検索結果", exact: true }).click();
+      await expect(window.getByTestId("results-pane")).toBeVisible();
+
+      const firstHit = window.getByTestId("result-page").first().locator("button").nth(1);
+      await firstHit.click();
+      const urlAfterFirstClick = (await getBrowserViewState(electronApp)).url;
+      await firstHit.click();
+      await expect
+        .poll(async () => (await getBrowserViewState(electronApp)).url, { timeout: 3_000 })
+        .toBe(urlAfterFirstClick);
+
+      await window.getByRole("button", { name: "検索をクリア" }).click();
+      await expect(window.getByTestId("results-pane")).toBeHidden();
+      await expect(window.getByPlaceholder(/検索/)).toHaveValue("");
     } finally {
       await electronApp.close();
       await rm(userDataDir, { recursive: true, force: true });
