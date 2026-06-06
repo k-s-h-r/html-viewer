@@ -16,9 +16,37 @@ function htmlToText(html: string): string {
   return $("body").text().replace(/\s+/g, " ").trim();
 }
 
-function makeSnippet(text: string, index: number, length: number): string {
-  const start = Math.max(0, index - 48);
-  const end = Math.min(text.length, index + length + 72);
+const SNIPPET_MAX_BODY = 38;
+
+function makeSnippet(text: string, index: number, matchLength: number): string {
+  const matchEnd = index + matchLength;
+  const budget = Math.max(SNIPPET_MAX_BODY, matchLength + 8);
+  const maxBefore = 12;
+
+  let start = Math.max(0, index - maxBefore);
+  let end = Math.min(text.length, matchEnd + (budget - maxBefore - matchLength));
+
+  start = Math.min(start, index);
+  end = Math.max(end, matchEnd);
+
+  if (end - start > budget) {
+    end = start + budget;
+  }
+
+  if (matchEnd > end) {
+    end = matchEnd;
+    start = Math.max(0, end - budget);
+  }
+
+  if (index < start) {
+    start = Math.max(0, index - 4);
+    end = Math.min(text.length, start + budget);
+    if (matchEnd > end) {
+      end = matchEnd;
+      start = Math.max(0, end - budget);
+    }
+  }
+
   const prefix = start > 0 ? "..." : "";
   const suffix = end < text.length ? "..." : "";
   return `${prefix}${text.slice(start, end)}${suffix}`;
@@ -42,7 +70,7 @@ function findHits(page: IndexedPage, query: string, matchCase: boolean): SearchH
       pagePath: page.path,
       index,
       ordinal: hits.length + 1,
-      snippet: makeSnippet(page.text, index, query.length)
+      snippet: makeSnippet(page.text, index, needle.length)
     });
     index = haystack.indexOf(needle, index + Math.max(needle.length, 1));
   }
