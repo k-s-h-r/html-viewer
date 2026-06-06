@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CaseSensitive,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronUp,
   ExternalLink,
   FileText,
   FileWarning,
@@ -112,12 +110,12 @@ export default function App() {
   const [focusMode, setFocusMode] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
+  const [submittedQuery, setSubmittedQuery] = useState("");
   const [matchCase, setMatchCase] = useState(false);
   const [searchResult, setSearchResult] = useState<SearchResult>(EMPTY_SEARCH);
   const [findResult, setFindResult] = useState<FindResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedPages, setExpandedPages] = useState<Set<string>>(new Set());
-  const [toolbarOverlayOpen, setToolbarOverlayOpen] = useState(false);
   const viewerHostRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const pendingFindTargetRef = useRef<PendingFindTarget | null>(null);
@@ -136,6 +134,8 @@ export default function App() {
     setDeck(nextDeck);
     setSearchResult(EMPTY_SEARCH);
     setFindResult(null);
+    setSearchQuery("");
+    setSubmittedQuery("");
     setSelectedPath(null);
     setSelectedHash(null);
     setExpandedPages(new Set());
@@ -151,11 +151,6 @@ export default function App() {
       return;
     }
 
-    if (toolbarOverlayOpen) {
-      void window.viewerApi.setViewBounds({ x: 0, y: 0, width: 0, height: 0 });
-      return;
-    }
-
     const element = viewerHostRef.current;
     if (!element) {
       return;
@@ -167,7 +162,7 @@ export default function App() {
       width: rect.width,
       height: rect.height
     });
-  }, [deck, toolbarOverlayOpen]);
+  }, [deck]);
 
   const navigateTo = useCallback(async (page: DeckPage, href = page.href) => {
     if (!canNavigate(page)) {
@@ -207,18 +202,39 @@ export default function App() {
 
   const runFind = useCallback(
     (forward: boolean, findNext: boolean) => {
-      if (!searchQuery.trim()) {
+      if (!submittedQuery.trim()) {
         return;
       }
       void window.viewerApi.findInPage({
-        query: searchQuery,
+        query: submittedQuery,
         forward,
         findNext,
         matchCase
       });
     },
-    [matchCase, searchQuery]
+    [matchCase, submittedQuery]
   );
+
+  const executeSearch = useCallback(async () => {
+    const query = searchQuery.trim();
+    if (!query) {
+      setSubmittedQuery("");
+      setSearchResult(EMPTY_SEARCH);
+      setFindResult(null);
+      await window.viewerApi.stopFindInPage();
+      return;
+    }
+
+    const result = await window.viewerApi.search(query, matchCase);
+    setSubmittedQuery(query);
+    setSearchResult(result);
+    void window.viewerApi.findInPage({
+      query,
+      forward: true,
+      findNext: false,
+      matchCase
+    });
+  }, [matchCase, searchQuery]);
 
   const runFindAtOrdinal = useCallback(
     (ordinal: number) => {
@@ -256,7 +272,7 @@ export default function App() {
 
   const navigateSearchAcrossPages = useCallback(
     (forward: boolean) => {
-      if (!searchQuery.trim() || searchResult.pages.length === 0) {
+      if (!submittedQuery.trim() || searchResult.pages.length === 0) {
         return;
       }
 
@@ -286,7 +302,7 @@ export default function App() {
 
       runFind(forward, true);
     },
-    [findResult, navigateToSearchTarget, runFind, searchQuery, searchResult.pages, selectedPath]
+    [findResult, navigateToSearchTarget, runFind, searchResult.pages, selectedPath, submittedQuery]
   );
 
   useEffect(() => {
@@ -307,12 +323,17 @@ export default function App() {
     });
     const cleanupFind = window.viewerApi.onFindResult(setFindResult);
     const cleanupZoom = window.viewerApi.onZoomChanged(setZoom);
+    const cleanupFocusSearch = window.viewerApi.onFocusSearch(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    });
 
     return () => {
       cleanupDeck();
       cleanupNavigation();
       cleanupFind();
       cleanupZoom();
+      cleanupFocusSearch();
     };
   }, [applyDeck, updateRecentFolders]);
 
@@ -331,27 +352,10 @@ export default function App() {
       observer.disconnect();
       window.removeEventListener("resize", reportViewBounds);
     };
-  }, [reportViewBounds, sidebarVisible, focusMode, searchQuery, toolbarOverlayOpen]);
+  }, [reportViewBounds, sidebarVisible, focusMode, submittedQuery]);
 
   useEffect(() => {
-    const handle = window.setTimeout(async () => {
-      if (!searchQuery.trim()) {
-        setSearchResult(EMPTY_SEARCH);
-        setFindResult(null);
-        await window.viewerApi.stopFindInPage();
-        return;
-      }
-
-      const result = await window.viewerApi.search(searchQuery, matchCase);
-      setSearchResult(result);
-      runFind(true, false);
-    }, 150);
-
-    return () => window.clearTimeout(handle);
-  }, [matchCase, runFind, searchQuery]);
-
-  useEffect(() => {
-    if (selectedPath && searchQuery.trim()) {
+    if (selectedPath && submittedQuery.trim()) {
       const pendingFindTarget = pendingFindTargetRef.current;
       if (pendingFindTarget?.pagePath === selectedPath) {
         pendingFindTargetRef.current = null;
@@ -367,7 +371,7 @@ export default function App() {
 
       runFind(true, false);
     }
-  }, [runFind, runFindAtOrdinal, searchQuery, selectedPath]);
+  }, [runFind, runFindAtOrdinal, selectedPath, submittedQuery]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -451,10 +455,10 @@ export default function App() {
   };
 
   const showSidebar = sidebarVisible && !focusMode;
-  const showResults = Boolean(searchQuery.trim());
+  const showResults = Boolean(submittedQuery.trim()) && searchQuery.trim() === submittedQuery;
   const findCounter = useMemo(
-    () => formatGlobalFindCounter(searchQuery, searchResult, selectedPath, findResult),
-    [findResult, searchQuery, searchResult, selectedPath]
+    () => formatGlobalFindCounter(submittedQuery, searchResult, selectedPath, findResult),
+    [findResult, searchResult, selectedPath, submittedQuery]
   );
 
   return (
@@ -474,7 +478,7 @@ export default function App() {
                 <FolderOpen />
                 フォルダを開く
               </Button>
-              <DropdownMenu onOpenChange={setToolbarOverlayOpen}>
+              <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
                     <Button
@@ -487,7 +491,7 @@ export default function App() {
                     </Button>
                   }
                 />
-                <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuContent align="start" side="top" className="w-64">
                   <DropdownMenuGroup>
                     <DropdownMenuLabel>最近使ったフォルダ</DropdownMenuLabel>
                     {recentFolders.map((folder) => (
@@ -514,11 +518,24 @@ export default function App() {
                   className="pl-8"
                   placeholder="検索...  (Ctrl+F)"
                   value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.currentTarget.value)}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setSearchQuery(value);
+                    if (!value.trim()) {
+                      setSubmittedQuery("");
+                      setSearchResult(EMPTY_SEARCH);
+                      setFindResult(null);
+                      void window.viewerApi.stopFindInPage();
+                    }
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       event.preventDefault();
-                      navigateSearchAcrossPages(!event.shiftKey);
+                      if (showResults) {
+                        navigateSearchAcrossPages(!event.shiftKey);
+                      } else {
+                        void executeSearch();
+                      }
                     }
                   }}
                 />
@@ -544,7 +561,23 @@ export default function App() {
                     </Button>
                   }
                 />
-                <TooltipContent>大文字小文字を区別</TooltipContent>
+                <TooltipContent side="top">大文字小文字を区別</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="検索"
+                      disabled={!searchQuery.trim()}
+                      onClick={() => void executeSearch()}
+                    >
+                      <Search />
+                    </Button>
+                  }
+                />
+                <TooltipContent side="top">検索 (Enter)</TooltipContent>
               </Tooltip>
               <Button
                 variant="ghost"
@@ -553,7 +586,7 @@ export default function App() {
                 aria-label="前のヒット"
                 onClick={() => navigateSearchAcrossPages(false)}
               >
-                <ChevronUp />
+                <ChevronLeft />
               </Button>
               <Button
                 variant="ghost"
@@ -562,7 +595,7 @@ export default function App() {
                 aria-label="次のヒット"
                 onClick={() => navigateSearchAcrossPages(true)}
               >
-                <ChevronDown />
+                <ChevronRight />
               </Button>
             </div>
 
@@ -614,7 +647,7 @@ export default function App() {
                     </Button>
                   }
                 />
-                <TooltipContent>100%に戻す</TooltipContent>
+                <TooltipContent side="top">100%に戻す</TooltipContent>
               </Tooltip>
               <Button
                 variant="ghost"
@@ -641,7 +674,7 @@ export default function App() {
                     </Button>
                   }
                 />
-                <TooltipContent>サイドバー</TooltipContent>
+                <TooltipContent side="top">サイドバー</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger
@@ -656,7 +689,7 @@ export default function App() {
                     </Button>
                   }
                 />
-                <TooltipContent>集中モード</TooltipContent>
+                <TooltipContent side="top">集中モード</TooltipContent>
               </Tooltip>
             </div>
           </header>
