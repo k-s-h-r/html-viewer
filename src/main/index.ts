@@ -123,6 +123,12 @@ function buildAppMenu(): void {
     {
       label: "表示",
       submenu: [
+        {
+          label: "検索...",
+          accelerator: "CmdOrCtrl+F",
+          click: () => focusSearchInRenderer()
+        },
+        { type: "separator" },
         { role: "reload" },
         { role: "toggleDevTools" },
         { type: "separator" },
@@ -158,6 +164,11 @@ function sendToRenderer(channel: string, payload: unknown): void {
 }
 
 function focusSearchInRenderer(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+  mainWindow.focus();
+  mainWindow.webContents.focus();
   sendToRenderer("viewer:focus-search", null);
 }
 
