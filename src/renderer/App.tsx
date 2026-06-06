@@ -47,6 +47,7 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { formatGlobalFindCounter } from "./searchCounter";
 
 const EMPTY_SEARCH: SearchResult = {
   query: "",
@@ -445,10 +446,10 @@ export default function App() {
 
   const showSidebar = sidebarVisible && !focusMode;
   const showResults = Boolean(searchQuery.trim());
-  const findCounter =
-    findResult && findResult.matches > 0
-      ? `${findResult.activeMatchOrdinal}/${findResult.matches}`
-      : null;
+  const findCounter = useMemo(
+    () => formatGlobalFindCounter(searchQuery, searchResult, selectedPath, findResult),
+    [findResult, searchQuery, searchResult, selectedPath]
+  );
 
   return (
     <TooltipProvider delay={300}>
@@ -516,7 +517,10 @@ export default function App() {
                   }}
                 />
                 {findCounter ? (
-                  <span className="absolute top-1/2 right-2.5 -translate-y-1/2 text-xs tabular-nums text-muted-foreground">
+                  <span
+                    data-testid="find-counter"
+                    className="absolute top-1/2 right-2.5 -translate-y-1/2 text-xs tabular-nums text-muted-foreground"
+                  >
                     {findCounter}
                   </span>
                 ) : null}
