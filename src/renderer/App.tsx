@@ -117,6 +117,7 @@ export default function App() {
   const [findResult, setFindResult] = useState<FindResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedPages, setExpandedPages] = useState<Set<string>>(new Set());
+  const [toolbarOverlayOpen, setToolbarOverlayOpen] = useState(false);
   const viewerHostRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const pendingFindTargetRef = useRef<PendingFindTarget | null>(null);
@@ -150,6 +151,11 @@ export default function App() {
       return;
     }
 
+    if (toolbarOverlayOpen) {
+      void window.viewerApi.setViewBounds({ x: 0, y: 0, width: 0, height: 0 });
+      return;
+    }
+
     const element = viewerHostRef.current;
     if (!element) {
       return;
@@ -161,7 +167,7 @@ export default function App() {
       width: rect.width,
       height: rect.height
     });
-  }, [deck]);
+  }, [deck, toolbarOverlayOpen]);
 
   const navigateTo = useCallback(async (page: DeckPage, href = page.href) => {
     if (!canNavigate(page)) {
@@ -325,7 +331,7 @@ export default function App() {
       observer.disconnect();
       window.removeEventListener("resize", reportViewBounds);
     };
-  }, [reportViewBounds, sidebarVisible, focusMode, searchQuery]);
+  }, [reportViewBounds, sidebarVisible, focusMode, searchQuery, toolbarOverlayOpen]);
 
   useEffect(() => {
     const handle = window.setTimeout(async () => {
@@ -468,7 +474,7 @@ export default function App() {
                 <FolderOpen />
                 フォルダを開く
               </Button>
-              <DropdownMenu>
+              <DropdownMenu onOpenChange={setToolbarOverlayOpen}>
                 <DropdownMenuTrigger
                   render={
                     <Button
