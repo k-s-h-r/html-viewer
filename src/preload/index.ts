@@ -3,6 +3,7 @@ import type {
   Deck,
   FindRequest,
   FindResult,
+  InputPoint,
   NavigationState,
   RecentFolder,
   SearchResult,
@@ -38,6 +39,8 @@ const api: ViewerApi = {
   findInPage: (request: FindRequest) =>
     ipcRenderer.invoke("viewer:find-in-page", request) as Promise<void>,
   stopFindInPage: () => ipcRenderer.invoke("viewer:stop-find-in-page") as Promise<void>,
+  focusSearch: (clickPoint?: InputPoint) =>
+    ipcRenderer.invoke("viewer:focus-search", clickPoint) as Promise<void>,
   onDeckChanged: (callback: (deck: Deck) => void) => on("deck:changed", callback),
   onNavigationChanged: (callback: (state: NavigationState) => void) =>
     on("viewer:navigation-changed", callback),
