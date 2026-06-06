@@ -135,7 +135,8 @@ test.describe("HTML Viewer", () => {
       await historyButton.click();
       await expect(window.getByText("最近使ったフォルダ", { exact: true })).toBeVisible();
       await expect(window.getByRole("menuitem", { name: "basic" })).toBeVisible();
-      await expectUiIntact(window, electronApp);
+      await expect(window.getByTestId("app-shell")).toBeVisible();
+      await expect(window.getByTestId("toolbar")).toBeVisible();
 
       await window.keyboard.press("Escape");
       await expect(window.getByRole("menuitem", { name: "basic" })).toBeHidden();
@@ -312,6 +313,32 @@ test.describe("HTML Viewer", () => {
       await window.getByRole("button", { name: "検索をクリア" }).click();
       await expect(window.getByTestId("results-pane")).toBeHidden();
       await expect(window.getByPlaceholder(/検索/)).toHaveValue("");
+    } finally {
+      await electronApp.close();
+      await rm(userDataDir, { recursive: true, force: true });
+    }
+  });
+
+  test("history dropdown stays above BrowserView", async () => {
+    const { electronApp, window, userDataDir } = await launchApp();
+
+    try {
+      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+
+      const historyButton = window.getByRole("button", { name: "最近使ったフォルダ" });
+      await historyButton.click();
+      await expect(window.getByRole("menuitem", { name: "basic" })).toBeVisible();
+
+      const hiddenView = await getBrowserViewState(electronApp);
+      expect(hiddenView.bounds.width).toBe(0);
+      expect(hiddenView.bounds.height).toBe(0);
+
+      await window.keyboard.press("Escape");
+      await expect(window.getByRole("menuitem", { name: "basic" })).toBeHidden();
+
+      await expect
+        .poll(async () => (await getBrowserViewState(electronApp)).bounds.width, { timeout: 5_000 })
+        .toBeGreaterThan(100);
     } finally {
       await electronApp.close();
       await rm(userDataDir, { recursive: true, force: true });

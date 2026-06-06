@@ -126,6 +126,7 @@ export default function App() {
   const [findResult, setFindResult] = useState<FindResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedPages, setExpandedPages] = useState<Set<string>>(new Set());
+  const [toolbarOverlayOpen, setToolbarOverlayOpen] = useState(false);
   const viewerHostRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const pendingFindTargetRef = useRef<PendingFindTarget | null>(null);
@@ -162,6 +163,11 @@ export default function App() {
       return;
     }
 
+    if (toolbarOverlayOpen) {
+      void window.viewerApi.setViewBounds({ x: 0, y: 0, width: 0, height: 0 });
+      return;
+    }
+
     const element = viewerHostRef.current;
     if (!element) {
       return;
@@ -173,7 +179,7 @@ export default function App() {
       width: rect.width,
       height: rect.height
     });
-  }, [deck]);
+  }, [deck, toolbarOverlayOpen]);
 
   const navigateTo = useCallback(async (page: DeckPage, href = page.href) => {
     activeSearchTargetRef.current = null;
@@ -360,7 +366,7 @@ export default function App() {
       observer.disconnect();
       window.removeEventListener("resize", reportViewBounds);
     };
-  }, [reportViewBounds, sidebarVisible, focusMode, searchQuery, resultsPaneVisible]);
+  }, [reportViewBounds, sidebarVisible, focusMode, searchQuery, resultsPaneVisible, toolbarOverlayOpen]);
 
   useEffect(() => {
     activeSearchTargetRef.current = null;
@@ -517,7 +523,7 @@ export default function App() {
                 <FolderOpen />
                 フォルダを開く
               </Button>
-              <DropdownMenu>
+              <DropdownMenu onOpenChange={setToolbarOverlayOpen}>
                 <DropdownMenuTrigger
                   render={
                     <Button
@@ -752,7 +758,7 @@ export default function App() {
 
         <main className={cn("flex min-h-0 flex-1 gap-3", focusMode ? "p-0" : "p-3")}>
           {showSidebar ? (
-            <aside className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+            <aside className="flex w-72 shrink-0 flex-col overflow-hidden border bg-card">
               <div className="flex items-baseline justify-between gap-2 border-b px-4 py-3">
                 <span className="truncate text-sm font-semibold">
                   {deck?.rootName ?? "仕様書未選択"}
@@ -857,7 +863,7 @@ export default function App() {
           <section
             className={cn(
               "relative min-h-0 min-w-0 flex-1 overflow-hidden border bg-card",
-              focusMode ? "rounded-none border-0" : "rounded-xl shadow-sm"
+              focusMode && "border-0"
             )}
           >
             {!deck ? (
