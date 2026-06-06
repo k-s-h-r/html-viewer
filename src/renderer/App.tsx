@@ -62,12 +62,14 @@ const EMPTY_SEARCH: SearchResult = {
 type ActiveSearchTarget = {
   pagePath: string;
   ordinal: number;
+  hitId: string;
 };
 
 type PendingFindTarget = {
   pagePath: string;
   direction: "first" | "last";
   ordinal?: number;
+  hitId: string;
 };
 
 function canNavigate(page: DeckPage): boolean {
@@ -181,20 +183,25 @@ export default function App() {
     });
   }, [deck, toolbarOverlayOpen]);
 
-  const navigateTo = useCallback(async (page: DeckPage, href = page.href) => {
-    activeSearchTargetRef.current = null;
+  const navigateTo = useCallback(
+    async (page: DeckPage, href = page.href, options?: { preserveSearchTarget?: boolean }) => {
+      if (!options?.preserveSearchTarget) {
+        activeSearchTargetRef.current = null;
+      }
 
-    if (!canNavigate(page)) {
-      return;
-    }
+      if (!canNavigate(page)) {
+        return;
+      }
 
-    if (page.kind === "external") {
-      await window.viewerApi.openExternal(page.href);
-      return;
-    }
+      if (page.kind === "external") {
+        await window.viewerApi.openExternal(page.href);
+        return;
+      }
 
-    await window.viewerApi.navigate(href);
-  }, []);
+      await window.viewerApi.navigate(href);
+    },
+    []
+  );
 
   const setZoomFactor = useCallback(async (nextZoom: number) => {
     const clamped = clampZoom(nextZoom);
@@ -220,11 +227,14 @@ export default function App() {
   );
 
   const runFind = useCallback(
-    (forward: boolean, findNext: boolean) => {
+    async (forward: boolean, findNext: boolean) => {
       if (!searchQuery.trim()) {
         return;
       }
-      void window.viewerApi.findInPage({
+      if (!findNext) {
+        await window.viewerApi.stopFindInPage();
+      }
+      await window.viewerApi.findInPage({
         query: searchQuery,
         forward,
         findNext,
@@ -235,56 +245,74 @@ export default function App() {
   );
 
   const runFindAtOrdinal = useCallback(
-    (ordinal: number) => {
+    async (ordinal: number) => {
       findOrdinalTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
       findOrdinalTimeoutsRef.current = [];
 
       const runId = ++findOrdinalRunIdRef.current;
-      runFind(true, false);
+      await runFind(true, false);
 
       for (let step = 1; step < ordinal; step += 1) {
-        const timeoutId = window.setTimeout(() => {
-          if (runId !== findOrdinalRunIdRef.current) {
-            return;
-          }
-          runFind(true, true);
-        }, step * 40);
-        findOrdinalTimeoutsRef.current.push(timeoutId);
+        if (runId !== findOrdinalRunIdRef.current) {
+          return;
+        }
+        await new Promise<void>((resolve) => {
+          const timeoutId = window.setTimeout(resolve, 40);
+          findOrdinalTimeoutsRef.current.push(timeoutId);
+        });
+        if (runId !== findOrdinalRunIdRef.current) {
+          return;
+        }
+        await runFind(true, true);
       }
     },
     [runFind]
   );
 
   const navigateToSearchTarget = useCallback(
-    (pagePath: string, direction: "first" | "last", ordinal?: number) => {
+    (pagePath: string, direction: "first" | "last", ordinal?: number, hitId?: string) => {
       const targetOrdinal = ordinal ?? 1;
+      const targetHitId = hitId ?? `page:${pagePath}`;
+      const target: ActiveSearchTarget = {
+        pagePath,
+        ordinal: targetOrdinal,
+        hitId: targetHitId
+      };
+
       if (
         selectedPath === pagePath &&
-        activeSearchTargetRef.current?.pagePath === pagePath &&
-        activeSearchTargetRef.current?.ordinal === targetOrdinal
+        activeSearchTargetRef.current?.pagePath === target.pagePath &&
+        activeSearchTargetRef.current?.ordinal === target.ordinal &&
+        activeSearchTargetRef.current?.hitId === target.hitId
       ) {
         return;
       }
 
-      activeSearchTargetRef.current = { pagePath, ordinal: targetOrdinal };
+      activeSearchTargetRef.current = target;
 
       const page = deck?.pages.find((candidate) => candidate.path === pagePath);
       if (!page) {
         return;
       }
 
-      pendingFindTargetRef.current = { pagePath, direction, ordinal };
+      pendingFindTargetRef.current = {
+        pagePath,
+        direction,
+        ordinal,
+        hitId: targetHitId
+      };
+
       if (pagePath === selectedPath) {
         pendingFindTargetRef.current = null;
         if (ordinal && ordinal > 1) {
-          runFindAtOrdinal(ordinal);
+          void runFindAtOrdinal(ordinal);
         } else {
-          runFind(direction === "first", false);
+          void runFind(direction === "first", false);
         }
         return;
       }
 
-      void navigateTo(page);
+      void navigateTo(page, page.href, { preserveSearchTarget: true });
     },
     [deck, navigateTo, runFind, runFindAtOrdinal, selectedPath]
   );
@@ -392,28 +420,39 @@ export default function App() {
 
       const result = await window.viewerApi.search(searchQuery, matchCase);
       setSearchResult(result);
-      runFind(true, false);
+      activeSearchTargetRef.current = null;
+      await runFind(true, false);
     }, 150);
 
     return () => window.clearTimeout(handle);
   }, [matchCase, runFind, searchQuery]);
 
   useEffect(() => {
-    if (selectedPath && searchQuery.trim()) {
-      const pendingFindTarget = pendingFindTargetRef.current;
-      if (pendingFindTarget?.pagePath === selectedPath) {
-        pendingFindTargetRef.current = null;
+    if (!selectedPath || !searchQuery.trim()) {
+      return;
+    }
 
-        if (pendingFindTarget.ordinal && pendingFindTarget.ordinal > 1) {
-          runFindAtOrdinal(pendingFindTarget.ordinal);
-          return;
-        }
+    const pendingFindTarget = pendingFindTargetRef.current;
+    if (pendingFindTarget?.pagePath === selectedPath) {
+      pendingFindTargetRef.current = null;
+      activeSearchTargetRef.current = {
+        pagePath: selectedPath,
+        ordinal: pendingFindTarget.ordinal ?? 1,
+        hitId: pendingFindTarget.hitId
+      };
 
-        runFind(pendingFindTarget.direction === "first", false);
+      if (pendingFindTarget.ordinal && pendingFindTarget.ordinal > 1) {
+        void runFindAtOrdinal(pendingFindTarget.ordinal);
         return;
       }
 
-      runFind(true, false);
+      void runFind(pendingFindTarget.direction === "first", false);
+      return;
+    }
+
+    if (activeSearchTargetRef.current?.pagePath !== selectedPath) {
+      activeSearchTargetRef.current = null;
+      void runFind(true, false);
     }
   }, [runFind, runFindAtOrdinal, searchQuery, selectedPath]);
 
@@ -945,7 +984,14 @@ export default function App() {
                       >
                         <button
                           type="button"
-                          onClick={() => navigateToSearchTarget(pageResult.pagePath, "first")}
+                          onClick={() =>
+                            navigateToSearchTarget(
+                              pageResult.pagePath,
+                              "first",
+                              undefined,
+                              `page:${pageResult.pagePath}`
+                            )
+                          }
                           className="flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-accent"
                         >
                           <strong className="truncate text-sm font-medium">
@@ -960,7 +1006,12 @@ export default function App() {
                             key={hit.id}
                             type="button"
                             onClick={() =>
-                              navigateToSearchTarget(hit.pagePath, "first", hit.ordinal)
+                              navigateToSearchTarget(
+                                hit.pagePath,
+                                "first",
+                                hit.ordinal,
+                                hit.id
+                              )
                             }
                             className="ml-2 line-clamp-2 rounded-md px-2.5 py-1.5 text-left text-xs leading-relaxed text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                           >

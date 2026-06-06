@@ -306,9 +306,21 @@ test.describe("HTML Viewer", () => {
       await firstHit.click();
       const urlAfterFirstClick = (await getBrowserViewState(electronApp)).url;
       await firstHit.click();
+      await firstHit.click();
       await expect
         .poll(async () => (await getBrowserViewState(electronApp)).url, { timeout: 3_000 })
         .toBe(urlAfterFirstClick);
+
+      const otherPageHit = window.getByTestId("result-page").nth(1).locator("button").nth(1);
+      await otherPageHit.click();
+      await expect
+        .poll(async () => (await getBrowserViewState(electronApp)).url, { timeout: 5_000 })
+        .not.toBe(urlAfterFirstClick);
+      const urlAfterPageChange = (await getBrowserViewState(electronApp)).url;
+      await otherPageHit.click();
+      await expect
+        .poll(async () => (await getBrowserViewState(electronApp)).url, { timeout: 3_000 })
+        .toBe(urlAfterPageChange);
 
       await window.getByRole("button", { name: "検索をクリア" }).click();
       await expect(window.getByTestId("results-pane")).toBeHidden();
