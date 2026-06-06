@@ -112,6 +112,53 @@ async function waitForDocumentViewUrl(
     .toMatch(pattern);
 }
 
+async function focusDocumentView(electronApp: ElectronApplication): Promise<void> {
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (!win) {
+      return;
+    }
+
+    for (const child of win.contentView.children) {
+      if (!("webContents" in child) || typeof child.webContents?.getURL !== "function") {
+        continue;
+      }
+      if (/127\.0\.0\.1/.test(child.webContents.getURL())) {
+        child.webContents.focus();
+      }
+    }
+  });
+}
+
+async function triggerFocusSearch(electronApp: ElectronApplication): Promise<void> {
+  await electronApp.evaluate(({ BrowserWindow, Menu }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (!win) {
+      return;
+    }
+
+    const findMenuItem = (menu: Electron.Menu): Electron.MenuItem | null => {
+      for (const item of menu.items) {
+        if (item.label === "検索...") {
+          return item;
+        }
+        if (item.submenu) {
+          const nested = findMenuItem(item.submenu);
+          if (nested) {
+            return nested;
+          }
+        }
+      }
+      return null;
+    };
+
+    const menuItem = Menu.getApplicationMenu()
+      ? findMenuItem(Menu.getApplicationMenu()!)
+      : null;
+    menuItem?.click({}, win, win.webContents);
+  });
+}
+
 test.describe("HTML Viewer", () => {
   test("launches, lists pages, searches, toggles focus mode, and loads BrowserView", async () => {
     const { electronApp, window, userDataDir } = await launchApp();
@@ -325,6 +372,25 @@ test.describe("HTML Viewer", () => {
 
       await window.keyboard.press("Escape");
       await expect(window.getByRole("menuitem", { name: "basic" })).toBeHidden();
+      await expectUiIntact(window, electronApp);
+    } finally {
+      await electronApp.close();
+      await rm(userDataDir, { recursive: true, force: true });
+    }
+  });
+
+  test("focus search from document view accepts keyboard input", async () => {
+    const { electronApp, window, userDataDir } = await launchApp();
+
+    try {
+      await waitForDocumentViewUrl(electronApp, /intro\.html/i);
+      await focusDocumentView(electronApp);
+      await triggerFocusSearch(electronApp);
+
+      const searchInput = window.getByPlaceholder(/検索/);
+      await window.keyboard.type("hello");
+
+      await expect(searchInput).toHaveValue("hello");
       await expectUiIntact(window, electronApp);
     } finally {
       await electronApp.close();
