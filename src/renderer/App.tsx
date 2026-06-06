@@ -818,7 +818,7 @@ export default function App() {
           {showResults ? (
             <aside
               data-testid="results-pane"
-              className="flex w-80 shrink-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm"
+              className="flex min-h-0 w-80 shrink-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm"
             >
               <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
                 <span className="text-sm font-semibold">検索結果</span>
@@ -827,7 +827,7 @@ export default function App() {
                 </Badge>
               </div>
               {searchResult.pages.length > 0 ? (
-                <ScrollArea className="flex-1">
+                <ScrollArea className="min-h-0 flex-1" data-testid="results-scroll">
                   <div className="flex flex-col gap-1 p-2">
                     {searchResult.pages.map((pageResult) => (
                       <section
