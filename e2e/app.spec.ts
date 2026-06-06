@@ -65,6 +65,20 @@ async function expectUiIntact(window: Page, electronApp: ElectronApplication): P
   expect(view.url, "BrowserView URL").toMatch(/127\.0\.0\.1/);
 }
 
+async function getZoomFactors(electronApp: ElectronApplication): Promise<{
+  renderer: number;
+  browserView: number;
+}> {
+  return electronApp.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    const view = win?.getBrowserView();
+    return {
+      renderer: win?.webContents.getZoomFactor() ?? 1,
+      browserView: view?.webContents.getZoomFactor() ?? 1
+    };
+  });
+}
+
 async function waitForBrowserViewUrl(
   electronApp: ElectronApplication,
   pattern: RegExp
@@ -263,6 +277,29 @@ test.describe("HTML Viewer", () => {
       });
 
       expect(scrollTopAfter).toBeGreaterThan(scrollTopBefore);
+      await expectUiIntact(window, electronApp);
+    } finally {
+      await electronApp.close();
+      await rm(userDataDir, { recursive: true, force: true });
+    }
+  });
+
+  test("zoom applies only to BrowserView, not the app chrome", async () => {
+    const { electronApp, window, userDataDir } = await launchApp();
+
+    try {
+      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+
+      const beforeZoom = await getZoomFactors(electronApp);
+      expect(beforeZoom.renderer).toBe(1);
+      expect(beforeZoom.browserView).toBe(1);
+
+      await window.getByRole("button", { name: "拡大" }).click();
+      await expect(window.getByRole("button", { name: "110%" })).toBeVisible();
+
+      const afterZoom = await getZoomFactors(electronApp);
+      expect(afterZoom.renderer).toBe(1);
+      expect(afterZoom.browserView).toBeGreaterThan(1);
       await expectUiIntact(window, electronApp);
     } finally {
       await electronApp.close();
