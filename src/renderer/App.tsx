@@ -3,6 +3,8 @@ import {
   CaseSensitive,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   ExternalLink,
   FileText,
   FileWarning,
@@ -13,6 +15,9 @@ import {
   Minimize2,
   Minus,
   PanelLeft,
+  PanelLeftClose,
+  PanelRight,
+  PanelRightClose,
   Plus,
   Search,
   X
@@ -46,6 +51,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { formatGlobalFindCounter } from "./searchCounter";
+import { HighlightedSnippet } from "./searchSnippet";
 
 const EMPTY_SEARCH: SearchResult = {
   query: "",
@@ -107,6 +113,7 @@ export default function App() {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [selectedHash, setSelectedHash] = useState<string | null>(null);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [resultsPaneVisible, setResultsPaneVisible] = useState(true);
   const [focusMode, setFocusMode] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
@@ -215,26 +222,33 @@ export default function App() {
     [matchCase, submittedQuery]
   );
 
+  const clearSearch = useCallback(async () => {
+    setSearchQuery("");
+    setSubmittedQuery("");
+    setSearchResult(EMPTY_SEARCH);
+    setFindResult(null);
+    await window.viewerApi.stopFindInPage();
+    searchInputRef.current?.focus();
+  }, []);
+
   const executeSearch = useCallback(async () => {
     const query = searchQuery.trim();
     if (!query) {
-      setSubmittedQuery("");
-      setSearchResult(EMPTY_SEARCH);
-      setFindResult(null);
-      await window.viewerApi.stopFindInPage();
+      await clearSearch();
       return;
     }
 
     const result = await window.viewerApi.search(query, matchCase);
     setSubmittedQuery(query);
     setSearchResult(result);
+    setResultsPaneVisible(true);
     void window.viewerApi.findInPage({
       query,
       forward: true,
       findNext: false,
       matchCase
     });
-  }, [matchCase, searchQuery]);
+  }, [clearSearch, matchCase, searchQuery]);
 
   const runFindAtOrdinal = useCallback(
     (ordinal: number) => {
@@ -352,7 +366,7 @@ export default function App() {
       observer.disconnect();
       window.removeEventListener("resize", reportViewBounds);
     };
-  }, [reportViewBounds, sidebarVisible, focusMode, submittedQuery]);
+  }, [reportViewBounds, sidebarVisible, resultsPaneVisible, focusMode, submittedQuery]);
 
   useEffect(() => {
     if (selectedPath && submittedQuery.trim()) {
@@ -456,6 +470,7 @@ export default function App() {
 
   const showSidebar = sidebarVisible && !focusMode;
   const showResults = Boolean(submittedQuery.trim()) && searchQuery.trim() === submittedQuery;
+  const showResultsPane = showResults && resultsPaneVisible && !focusMode;
   const findCounter = useMemo(
     () => formatGlobalFindCounter(submittedQuery, searchResult, selectedPath, findResult),
     [findResult, searchResult, selectedPath, submittedQuery]
@@ -511,21 +526,23 @@ export default function App() {
             <Separator orientation="vertical" className="mx-1 h-6 my-auto" />
 
             <div className="flex min-w-[320px] flex-1 items-center gap-1.5">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <div
+                className={cn(
+                  "flex h-8 min-w-0 flex-1 items-center rounded-lg border border-input bg-transparent dark:bg-input/30",
+                  "focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
+                )}
+              >
+                <Search className="pointer-events-none ml-2.5 size-4 shrink-0 text-muted-foreground" />
                 <Input
                   ref={searchInputRef}
-                  className="pl-8"
+                  className="h-full min-h-0 flex-1 border-0 bg-transparent px-2 shadow-none focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent"
                   placeholder="検索...  (Ctrl+F)"
                   value={searchQuery}
                   onChange={(event) => {
                     const value = event.currentTarget.value;
                     setSearchQuery(value);
                     if (!value.trim()) {
-                      setSubmittedQuery("");
-                      setSearchResult(EMPTY_SEARCH);
-                      setFindResult(null);
-                      void window.viewerApi.stopFindInPage();
+                      void clearSearch();
                     }
                   }}
                   onKeyDown={(event) => {
@@ -539,30 +556,50 @@ export default function App() {
                     }
                   }}
                 />
-                {findCounter ? (
-                  <span
-                    data-testid="find-counter"
-                    className="absolute top-1/2 right-2.5 -translate-y-1/2 text-xs tabular-nums text-muted-foreground"
-                  >
-                    {findCounter}
-                  </span>
-                ) : null}
-              </div>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
+                <div className="flex shrink-0 items-center gap-0.5 pr-1">
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          type="button"
+                          variant={matchCase ? "secondary" : "ghost"}
+                          size="icon-xs"
+                          aria-pressed={matchCase}
+                          aria-label="大文字小文字を区別"
+                          className={cn(
+                            "text-muted-foreground",
+                            matchCase && "text-foreground"
+                          )}
+                          onClick={() => setMatchCase((value) => !value)}
+                        >
+                          <CaseSensitive />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent side="top">大文字小文字を区別</TooltipContent>
+                  </Tooltip>
+                  {searchQuery.trim() ? (
                     <Button
-                      variant={matchCase ? "secondary" : "ghost"}
-                      size="icon-sm"
-                      aria-pressed={matchCase}
-                      onClick={() => setMatchCase((value) => !value)}
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label="検索をクリア"
+                      className="text-muted-foreground"
+                      onClick={() => void clearSearch()}
                     >
-                      <CaseSensitive />
+                      <X />
                     </Button>
-                  }
-                />
-                <TooltipContent side="top">大文字小文字を区別</TooltipContent>
-              </Tooltip>
+                  ) : null}
+                  {findCounter ? (
+                    <span
+                      data-testid="find-counter"
+                      className="px-1 text-xs tabular-nums text-muted-foreground"
+                    >
+                      {findCounter}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -586,7 +623,7 @@ export default function App() {
                 aria-label="前のヒット"
                 onClick={() => navigateSearchAcrossPages(false)}
               >
-                <ChevronLeft />
+                <ChevronUp />
               </Button>
               <Button
                 variant="ghost"
@@ -595,7 +632,7 @@ export default function App() {
                 aria-label="次のヒット"
                 onClick={() => navigateSearchAcrossPages(true)}
               >
-                <ChevronRight />
+                <ChevronDown />
               </Button>
             </div>
 
@@ -680,6 +717,23 @@ export default function App() {
                 <TooltipTrigger
                   render={
                     <Button
+                      variant={resultsPaneVisible ? "secondary" : "ghost"}
+                      size="icon-sm"
+                      aria-pressed={resultsPaneVisible}
+                      aria-label="検索結果"
+                      disabled={!showResults}
+                      onClick={() => setResultsPaneVisible((visible) => !visible)}
+                    >
+                      <PanelRight />
+                    </Button>
+                  }
+                />
+                <TooltipContent side="top">検索結果</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
                       variant="ghost"
                       size="icon-sm"
                       aria-label="集中モード"
@@ -711,15 +765,32 @@ export default function App() {
         <main className={cn("flex min-h-0 flex-1 gap-3", focusMode ? "p-0" : "p-3")}>
           {showSidebar ? (
             <aside className="flex w-72 shrink-0 flex-col overflow-hidden border bg-card">
-              <div className="flex items-baseline justify-between gap-2 border-b px-4 py-3">
+              <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
                 <span className="truncate text-sm font-semibold">
                   {deck?.rootName ?? "仕様書未選択"}
                 </span>
-                {deck ? (
-                  <Badge variant="secondary" className="shrink-0">
-                    {deck.hasToc ? "目次" : "フォールバック"}
-                  </Badge>
-                ) : null}
+                <div className="flex items-center gap-1.5">
+                  {deck ? (
+                    <Badge variant="secondary" className="shrink-0">
+                      {deck.hasToc ? "目次" : "フォールバック"}
+                    </Badge>
+                  ) : null}
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label="目次を閉じる"
+                          onClick={() => setSidebarVisible(false)}
+                        >
+                          <PanelLeftClose />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent side="right">目次を閉じる</TooltipContent>
+                  </Tooltip>
+                </div>
               </div>
               <ScrollArea className="flex-1">
                 <div className="flex flex-col gap-0.5 p-2">
@@ -858,16 +929,33 @@ export default function App() {
             ) : null}
           </section>
 
-          {showResults ? (
+          {showResultsPane ? (
             <aside
               data-testid="results-pane"
               className="flex min-h-0 w-80 shrink-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm"
             >
               <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
                 <span className="text-sm font-semibold">検索結果</span>
-                <Badge variant="secondary" data-testid="results-total">
-                  {searchResult.totalHits} 件
-                </Badge>
+                <div className="flex items-center gap-1.5">
+                  <Badge variant="secondary" data-testid="results-total">
+                    {searchResult.totalHits} 件
+                  </Badge>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label="検索結果を閉じる"
+                          onClick={() => setResultsPaneVisible(false)}
+                        >
+                          <PanelRightClose />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent side="left">検索結果を閉じる</TooltipContent>
+                  </Tooltip>
+                </div>
               </div>
               {searchResult.pages.length > 0 ? (
                 <ScrollArea className="min-h-0 flex-1" data-testid="results-scroll">
@@ -897,9 +985,13 @@ export default function App() {
                             onClick={() =>
                               navigateToSearchTarget(hit.pagePath, "first", hit.ordinal)
                             }
-                            className="ml-2 rounded-md px-2.5 py-1.5 text-left text-xs leading-relaxed text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                            className="ml-2 overflow-hidden rounded-md px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                           >
-                            {hit.snippet}
+                            <HighlightedSnippet
+                              snippet={hit.snippet}
+                              query={submittedQuery}
+                              matchCase={matchCase}
+                            />
                           </button>
                         ))}
                       </section>

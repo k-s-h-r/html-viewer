@@ -17,6 +17,7 @@ describe("SearchCatalog", () => {
     expect(result.pages.map((page) => page.pagePath)).toContain("chapters/search.html");
     expect(result.pages.map((page) => page.pagePath)).not.toContain("missing.html");
     expect(result.pages[0].hits[0].snippet).toContain("検索");
+    expect(result.pages[0].hits[0].snippet.length).toBeLessThanOrEqual(44);
     expect(result.pages[0].hits[0].ordinal).toBe(1);
     if (result.pages[0].hits.length > 1) {
       expect(result.pages[0].hits[1].ordinal).toBe(2);
