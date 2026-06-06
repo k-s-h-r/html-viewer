@@ -41,6 +41,8 @@ const api: ViewerApi = {
   onDeckChanged: (callback: (deck: Deck) => void) => on("deck:changed", callback),
   onNavigationChanged: (callback: (state: NavigationState) => void) =>
     on("viewer:navigation-changed", callback),
+  onPageLoaded: (callback: (state: NavigationState) => void) =>
+    on("viewer:page-loaded", callback),
   onFindResult: (callback: (result: FindResult) => void) =>
     on("viewer:find-result", callback),
   onZoomChanged: (callback: (factor: number) => void) =>

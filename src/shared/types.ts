@@ -97,6 +97,7 @@ export interface ViewerApi {
   stopFindInPage(): Promise<void>;
   onDeckChanged(callback: (deck: Deck) => void): () => void;
   onNavigationChanged(callback: (state: NavigationState) => void): () => void;
+  onPageLoaded(callback: (state: NavigationState) => void): () => void;
   onFindResult(callback: (result: FindResult) => void): () => void;
   onZoomChanged(callback: (factor: number) => void): () => void;
 }

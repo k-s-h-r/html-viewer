@@ -125,6 +125,10 @@ export default function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const pendingFindTargetRef = useRef<PendingFindTarget | null>(null);
   const activeSearchPageRef = useRef<string | null>(null);
+  const selectedPathRef = useRef<string | null>(null);
+  const searchQueryRef = useRef("");
+  const runFindRef = useRef<(forward: boolean, findNext: boolean) => Promise<void>>(async () => {});
+  const highlightFirstMatchRef = useRef<(forward: boolean) => void>(() => {});
 
   const navigablePages = useMemo(
     () => deck?.pages.filter((page) => page.kind === "page") ?? [],
@@ -234,6 +238,33 @@ export default function App() {
     [matchCase, searchQuery]
   );
 
+  // After a fresh page load there is no existing find session, so we must NOT call
+  // stopFindInPage (its clearSelection races with and wipes the new highlight).
+  // We also wait one frame so the newly-loaded content is laid out before searching.
+  const highlightFirstMatchOnLoad = useCallback(
+    (forward: boolean) => {
+      if (!searchQuery.trim()) {
+        return;
+      }
+      requestAnimationFrame(() => {
+        void window.viewerApi.findInPage({
+          query: searchQuery,
+          forward,
+          findNext: false,
+          matchCase
+        });
+      });
+    },
+    [matchCase, searchQuery]
+  );
+
+  useEffect(() => {
+    selectedPathRef.current = selectedPath;
+    searchQueryRef.current = searchQuery;
+    runFindRef.current = runFind;
+    highlightFirstMatchRef.current = highlightFirstMatchOnLoad;
+  }, [highlightFirstMatchOnLoad, runFind, searchQuery, selectedPath]);
+
   const navigateToSearchTarget = useCallback(
     (pagePath: string, direction: "first" | "last") => {
       // Re-clicking a result that is already the active target should be a no-op,
@@ -314,12 +345,34 @@ export default function App() {
     });
     const cleanupFind = window.viewerApi.onFindResult(setFindResult);
     const cleanupZoom = window.viewerApi.onZoomChanged(setZoom);
+    // Highlighting must wait until the page has finished loading; `did-navigate`
+    // fires before the content is laid out, so `findInPage` there finds nothing.
+    const cleanupPageLoaded = window.viewerApi.onPageLoaded(() => {
+      const path = selectedPathRef.current;
+      if (!path || !searchQueryRef.current.trim()) {
+        return;
+      }
+
+      const pendingFindTarget = pendingFindTargetRef.current;
+      if (pendingFindTarget?.pagePath === path) {
+        pendingFindTargetRef.current = null;
+        activeSearchPageRef.current = path;
+        highlightFirstMatchRef.current(pendingFindTarget.direction === "first");
+        return;
+      }
+
+      if (activeSearchPageRef.current !== path) {
+        activeSearchPageRef.current = path;
+        highlightFirstMatchRef.current(true);
+      }
+    });
 
     return () => {
       cleanupDeck();
       cleanupNavigation();
       cleanupFind();
       cleanupZoom();
+      cleanupPageLoaded();
     };
   }, [applyDeck, updateRecentFolders]);
 
@@ -367,27 +420,6 @@ export default function App() {
 
     return () => window.clearTimeout(handle);
   }, [matchCase, runFind, searchQuery]);
-
-  useEffect(() => {
-    if (!selectedPath || !searchQuery.trim()) {
-      return;
-    }
-
-    const pendingFindTarget = pendingFindTargetRef.current;
-    if (pendingFindTarget?.pagePath === selectedPath) {
-      pendingFindTargetRef.current = null;
-      activeSearchPageRef.current = selectedPath;
-      void runFind(pendingFindTarget.direction === "first", false);
-      return;
-    }
-
-    // Page changed by some other means (e.g. sidebar, in-page link);
-    // highlight the first match on the newly selected page.
-    if (activeSearchPageRef.current !== selectedPath) {
-      activeSearchPageRef.current = selectedPath;
-      void runFind(true, false);
-    }
-  }, [runFind, searchQuery, selectedPath]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

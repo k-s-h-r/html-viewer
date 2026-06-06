@@ -187,6 +187,10 @@ function createBrowserView(): BrowserView {
     sendToRenderer("viewer:navigation-changed", navigationStateFromUrl(url));
   });
 
+  view.webContents.on("did-finish-load", () => {
+    sendToRenderer("viewer:page-loaded", navigationStateFromUrl(view.webContents.getURL()));
+  });
+
   view.webContents.on("found-in-page", (_event, result) => {
     const payload: FindResult = {
       requestId: result.requestId,
