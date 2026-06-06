@@ -60,12 +60,6 @@ const EMPTY_SEARCH: SearchResult = {
   pages: []
 };
 
-type PendingFindTarget = {
-  pagePath: string;
-  direction: "first" | "last";
-  ordinal?: number;
-};
-
 function canNavigate(page: DeckPage): boolean {
   return page.kind === "page" || page.kind === "external";
 }
@@ -125,7 +119,7 @@ export default function App() {
   const [expandedPages, setExpandedPages] = useState<Set<string>>(new Set());
   const viewerHostRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const pendingFindTargetRef = useRef<PendingFindTarget | null>(null);
+  const findSequenceRef = useRef(0);
 
   const navigablePages = useMemo(
     () => deck?.pages.filter((page) => page.kind === "page") ?? [],
@@ -152,6 +146,82 @@ export default function App() {
     setRecentFolders(await window.viewerApi.getRecentFolders());
   }, []);
 
+  const focusSearchInput = useCallback(() => {
+    const input = searchInputRef.current;
+    if (!input) {
+      return;
+    }
+    input.click();
+    input.focus({ preventScroll: true });
+    input.select();
+  }, []);
+
+  const getSearchInputPoint = useCallback(() => {
+    const input = searchInputRef.current;
+    if (!input) {
+      return undefined;
+    }
+    const rect = input.getBoundingClientRect();
+    return {
+      x: Math.round(rect.left + rect.width / 2),
+      y: Math.round(rect.top + rect.height / 2)
+    };
+  }, []);
+
+  const ensureSearchInputFocused = useCallback(async () => {
+    await window.viewerApi.focusSearch(getSearchInputPoint());
+    focusSearchInput();
+  }, [focusSearchInput, getSearchInputPoint]);
+
+  const beginFind = useCallback(
+    (query = submittedQuery, forward = true) => {
+      if (!query.trim()) {
+        return;
+      }
+      const sequence = (findSequenceRef.current += 1);
+      void (async () => {
+        await window.viewerApi.stopFindInPage();
+        if (findSequenceRef.current !== sequence) {
+          return;
+        }
+        await window.viewerApi.findInPage({
+          query,
+          forward,
+          findNext: true,
+          matchCase
+        });
+        window.setTimeout(() => {
+          if (findSequenceRef.current !== sequence) {
+            return;
+          }
+          void window.viewerApi.findInPage({
+            query,
+            forward,
+            findNext: false,
+            matchCase
+          });
+        }, 0);
+      })();
+    },
+    [matchCase, submittedQuery]
+  );
+
+  const stepFind = useCallback(
+    (forward: boolean) => {
+      if (!submittedQuery.trim()) {
+        return;
+      }
+      findSequenceRef.current += 1;
+      void window.viewerApi.findInPage({
+        query: submittedQuery,
+        forward,
+        findNext: false,
+        matchCase
+      });
+    },
+    [matchCase, submittedQuery]
+  );
+
   const reportViewBounds = useCallback(() => {
     if (!deck) {
       void window.viewerApi.setViewBounds({ x: 0, y: 0, width: 0, height: 0 });
@@ -171,18 +241,24 @@ export default function App() {
     });
   }, [deck]);
 
-  const navigateTo = useCallback(async (page: DeckPage, href = page.href) => {
-    if (!canNavigate(page)) {
-      return;
-    }
+  const navigateTo = useCallback(
+    async (page: DeckPage, href = page.href, refindForward?: boolean) => {
+      if (!canNavigate(page)) {
+        return;
+      }
 
-    if (page.kind === "external") {
-      await window.viewerApi.openExternal(page.href);
-      return;
-    }
+      if (page.kind === "external") {
+        await window.viewerApi.openExternal(page.href);
+        return;
+      }
 
-    await window.viewerApi.navigate(href);
-  }, []);
+      await window.viewerApi.navigate(href);
+      if (refindForward !== undefined && submittedQuery.trim()) {
+        beginFind(submittedQuery, refindForward);
+      }
+    },
+    [beginFind, submittedQuery]
+  );
 
   const setZoomFactor = useCallback(async (nextZoom: number) => {
     const clamped = clampZoom(nextZoom);
@@ -202,27 +278,13 @@ export default function App() {
         Math.max(0, currentIndex + offset)
       );
       const page = navigablePages[nextIndex] ?? navigablePages[0];
-      void navigateTo(page);
+      void navigateTo(page, page.href, submittedQuery.trim() ? true : undefined);
     },
-    [deck, navigablePages, navigateTo, selectedPath]
-  );
-
-  const runFind = useCallback(
-    (forward: boolean, findNext: boolean) => {
-      if (!submittedQuery.trim()) {
-        return;
-      }
-      void window.viewerApi.findInPage({
-        query: submittedQuery,
-        forward,
-        findNext,
-        matchCase
-      });
-    },
-    [matchCase, submittedQuery]
+    [deck, navigablePages, navigateTo, selectedPath, submittedQuery]
   );
 
   const clearSearch = useCallback(async () => {
+    findSequenceRef.current += 1;
     setSearchQuery("");
     setSubmittedQuery("");
     setSearchResult(EMPTY_SEARCH);
@@ -241,47 +303,30 @@ export default function App() {
     const result = await window.viewerApi.search(query, matchCase);
     setSubmittedQuery(query);
     setSearchResult(result);
+    setFindResult(null);
     setResultsPaneVisible(true);
-    void window.viewerApi.findInPage({
-      query,
-      forward: true,
-      findNext: false,
-      matchCase
-    });
-  }, [clearSearch, matchCase, searchQuery]);
-
-  const runFindAtOrdinal = useCallback(
-    (ordinal: number) => {
-      runFind(true, false);
-
-      for (let step = 1; step < ordinal; step += 1) {
-        window.setTimeout(() => runFind(true, true), step * 40);
-      }
-    },
-    [runFind]
-  );
+    await ensureSearchInputFocused();
+    beginFind(query, true);
+  }, [beginFind, clearSearch, ensureSearchInputFocused, matchCase, searchQuery]);
 
   const navigateToSearchTarget = useCallback(
-    (pagePath: string, direction: "first" | "last", ordinal?: number) => {
+    async (pagePath: string, forward = true) => {
       const page = deck?.pages.find((candidate) => candidate.path === pagePath);
       if (!page) {
         return;
       }
 
-      pendingFindTargetRef.current = { pagePath, direction, ordinal };
       if (pagePath === selectedPath) {
-        pendingFindTargetRef.current = null;
-        if (ordinal && ordinal > 1) {
-          runFindAtOrdinal(ordinal);
-        } else {
-          runFind(direction === "first", false);
-        }
-        return;
+        beginFind(submittedQuery, forward);
+        window.setTimeout(() => {
+          void ensureSearchInputFocused();
+        }, 50);
+      } else {
+        await navigateTo(page, page.href, forward);
+        await ensureSearchInputFocused();
       }
-
-      void navigateTo(page);
     },
-    [deck, navigateTo, runFind, runFindAtOrdinal, selectedPath]
+    [beginFind, deck, ensureSearchInputFocused, navigateTo, selectedPath, submittedQuery]
   );
 
   const navigateSearchAcrossPages = useCallback(
@@ -295,7 +340,7 @@ export default function App() {
         const target = forward
           ? searchResult.pages[0]
           : searchResult.pages[searchResult.pages.length - 1];
-        navigateToSearchTarget(target.pagePath, forward ? "first" : "last");
+        void navigateToSearchTarget(target.pagePath, forward);
         return;
       }
 
@@ -310,13 +355,13 @@ export default function App() {
           (currentIndex + (forward ? 1 : -1) + searchResult.pages.length) %
           searchResult.pages.length;
         const target = searchResult.pages[nextIndex];
-        navigateToSearchTarget(target.pagePath, forward ? "first" : "last");
+        void navigateToSearchTarget(target.pagePath, forward);
         return;
       }
 
-      runFind(forward, true);
+      stepFind(forward);
     },
-    [findResult, navigateToSearchTarget, runFind, searchResult.pages, selectedPath, submittedQuery]
+    [findResult, navigateToSearchTarget, searchResult.pages, selectedPath, stepFind, submittedQuery]
   );
 
   useEffect(() => {
@@ -338,8 +383,8 @@ export default function App() {
     const cleanupFind = window.viewerApi.onFindResult(setFindResult);
     const cleanupZoom = window.viewerApi.onZoomChanged(setZoom);
     const cleanupFocusSearch = window.viewerApi.onFocusSearch(() => {
-      searchInputRef.current?.focus();
-      searchInputRef.current?.select();
+      focusSearchInput();
+      window.requestAnimationFrame(focusSearchInput);
     });
 
     return () => {
@@ -349,7 +394,7 @@ export default function App() {
       cleanupZoom();
       cleanupFocusSearch();
     };
-  }, [applyDeck, updateRecentFolders]);
+  }, [applyDeck, focusSearchInput, updateRecentFolders]);
 
   useEffect(() => {
     reportViewBounds();
@@ -369,23 +414,8 @@ export default function App() {
   }, [reportViewBounds, sidebarVisible, resultsPaneVisible, focusMode, submittedQuery]);
 
   useEffect(() => {
-    if (selectedPath && submittedQuery.trim()) {
-      const pendingFindTarget = pendingFindTargetRef.current;
-      if (pendingFindTarget?.pagePath === selectedPath) {
-        pendingFindTargetRef.current = null;
-
-        if (pendingFindTarget.ordinal && pendingFindTarget.ordinal > 1) {
-          runFindAtOrdinal(pendingFindTarget.ordinal);
-          return;
-        }
-
-        runFind(pendingFindTarget.direction === "first", false);
-        return;
-      }
-
-      runFind(true, false);
-    }
-  }, [runFind, runFindAtOrdinal, selectedPath, submittedQuery]);
+    return window.viewerApi.onDocumentVisibilityRestored(reportViewBounds);
+  }, [reportViewBounds]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -396,8 +426,7 @@ export default function App() {
       if (event.ctrlKey || event.metaKey) {
         if (event.key.toLowerCase() === "f") {
           event.preventDefault();
-          searchInputRef.current?.focus();
-          searchInputRef.current?.select();
+          void ensureSearchInputFocused();
         }
         if (event.key === "=" || event.key === "+") {
           event.preventDefault();
@@ -428,7 +457,7 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [focusMode, navigateByOffset, setZoomFactor, zoom]);
+  }, [ensureSearchInputFocused, focusMode, navigateByOffset, setZoomFactor, zoom]);
 
   const openFolder = async () => {
     try {
@@ -805,7 +834,13 @@ export default function App() {
                             <button
                               type="button"
                               disabled={disabled}
-                              onClick={() => void navigateTo(page)}
+                              onClick={() =>
+                                void navigateTo(
+                                  page,
+                                  page.href,
+                                  submittedQuery.trim() ? true : undefined
+                                )
+                              }
                               className={cn(
                                 "flex min-h-[52px] w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors",
                                 page.anchors.length > 0 ? "pr-9" : "pr-2",
@@ -856,7 +891,13 @@ export default function App() {
                                   <button
                                     key={anchor.id}
                                     type="button"
-                                    onClick={() => void navigateTo(page, anchor.href)}
+                                    onClick={() =>
+                                      void navigateTo(
+                                        page,
+                                        anchor.href,
+                                        submittedQuery.trim() ? true : undefined
+                                      )
+                                    }
                                     className={cn(
                                       "truncate rounded-md px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-accent",
                                       anchorSelected
@@ -968,7 +1009,7 @@ export default function App() {
                       >
                         <button
                           type="button"
-                          onClick={() => navigateToSearchTarget(pageResult.pagePath, "first")}
+                          onClick={() => void navigateToSearchTarget(pageResult.pagePath, true)}
                           className="flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-accent"
                         >
                           <strong className="truncate text-sm font-medium">
@@ -979,20 +1020,16 @@ export default function App() {
                           </Badge>
                         </button>
                         {pageResult.hits.slice(0, 5).map((hit) => (
-                          <button
+                          <div
                             key={hit.id}
-                            type="button"
-                            onClick={() =>
-                              navigateToSearchTarget(hit.pagePath, "first", hit.ordinal)
-                            }
-                            className="ml-2 overflow-hidden rounded-md px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                            className="ml-2 overflow-hidden rounded-md px-2.5 py-1.5 text-left text-xs text-muted-foreground"
                           >
                             <HighlightedSnippet
                               snippet={hit.snippet}
                               query={submittedQuery}
                               matchCase={matchCase}
                             />
-                          </button>
+                          </div>
                         ))}
                       </section>
                     ))}

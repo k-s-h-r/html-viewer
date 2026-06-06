@@ -175,11 +175,19 @@ test.describe("HTML Viewer", () => {
       await waitForDocumentViewUrl(electronApp, /intro\.html/i);
       await expectUiIntact(window, electronApp);
 
-      await window.getByPlaceholder(/検索/).fill("検索");
-      await window.getByPlaceholder(/検索/).press("Enter");
+      const searchInput = window.getByPlaceholder(/検索/);
+      await searchInput.fill("検索");
+      await searchInput.press("Enter");
       await expect(window.getByTestId("results-pane")).toBeVisible();
       await expect(window.getByTestId("result-page").first()).toBeVisible();
       await expect(window.getByTestId("results-total")).not.toHaveText("0 件");
+      await expect(window.getByTestId("find-counter")).toHaveText(/^1\/\d+$/);
+
+      await searchInput.press("Enter");
+      await expect(window.getByTestId("find-counter")).toHaveText(/^2\/\d+$/);
+
+      await window.getByTestId("result-page").first().getByRole("button").click();
+      await expect(window.getByTestId("find-counter")).toHaveText(/^1\/\d+$/);
 
       await window.getByRole("button", { name: "集中モード", exact: true }).click();
       await expect(window.getByTestId("app-shell")).toHaveAttribute("data-focus-mode", "true");
@@ -388,6 +396,7 @@ test.describe("HTML Viewer", () => {
       await triggerFocusSearch(electronApp);
 
       const searchInput = window.getByPlaceholder(/検索/);
+      await expect(searchInput).toBeFocused();
       await window.keyboard.type("hello");
 
       await expect(searchInput).toHaveValue("hello");

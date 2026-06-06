@@ -58,6 +58,11 @@ export interface ViewBounds {
   height: number;
 }
 
+export interface InputPoint {
+  x: number;
+  y: number;
+}
+
 export interface FindRequest {
   query: string;
   forward: boolean;
@@ -95,9 +100,11 @@ export interface ViewerApi {
   search(query: string, matchCase: boolean): Promise<SearchResult>;
   findInPage(request: FindRequest): Promise<void>;
   stopFindInPage(): Promise<void>;
+  focusSearch(clickPoint?: InputPoint): Promise<void>;
   onDeckChanged(callback: (deck: Deck) => void): () => void;
   onNavigationChanged(callback: (state: NavigationState) => void): () => void;
   onFindResult(callback: (result: FindResult) => void): () => void;
   onZoomChanged(callback: (factor: number) => void): () => void;
   onFocusSearch(callback: () => void): () => void;
+  onDocumentVisibilityRestored(callback: () => void): () => void;
 }

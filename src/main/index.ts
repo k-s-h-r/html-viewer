@@ -14,6 +14,7 @@ import type {
   Deck,
   FindRequest,
   FindResult,
+  InputPoint,
   NavigationState,
   RecentFolder,
   ViewBounds
@@ -36,6 +37,7 @@ let searchCatalog: SearchCatalog | null = null;
 let recentFolders: RecentFolder[] = [];
 let zoomFactor = 1;
 let isStoppingForQuit = false;
+let searchFocusLockUntil = 0;
 
 function recentFoldersPath(): string {
   return path.join(app.getPath("userData"), "recent-folders.json");
@@ -163,24 +165,93 @@ function sendToRenderer(channel: string, payload: unknown): void {
   mainWindow.webContents.send(channel, payload);
 }
 
-function focusSearchInRenderer(): void {
+function clickRendererPoint(point: InputPoint): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return;
   }
-  mainWindow.focus();
-  mainWindow.webContents.focus();
-  sendToRenderer("viewer:focus-search", null);
+
+  const x = Math.round(point.x);
+  const y = Math.round(point.y);
+  mainWindow.webContents.sendInputEvent({ type: "mouseMove", x, y });
+  mainWindow.webContents.sendInputEvent({
+    type: "mouseDown",
+    x,
+    y,
+    button: "left",
+    clickCount: 1
+  });
+  mainWindow.webContents.sendInputEvent({
+    type: "mouseUp",
+    x,
+    y,
+    button: "left",
+    clickCount: 1
+  });
 }
 
-function registerFocusSearchShortcut(contents: Electron.WebContents): void {
+async function focusSearchInRenderer(clickPoint?: InputPoint): Promise<void> {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  searchFocusLockUntil = Date.now() + 800;
+  documentView?.setVisible(false);
+
+  void documentView?.webContents.executeJavaScript(
+    "document.activeElement?.blur(); window.getSelection()?.removeAllRanges();",
+    true
+  );
+
+  if (process.platform === "darwin") {
+    app.focus({ steal: true });
+  }
+  mainWindow.focus();
+  mainWindow.webContents.focus();
+
+  await new Promise<void>((resolve) => {
+    setImmediate(() => {
+      documentView?.setVisible(true);
+      sendToRenderer("viewer:document-visibility-restored", null);
+      if (clickPoint) {
+        setTimeout(() => {
+          clickRendererPoint(clickPoint);
+          sendToRenderer("viewer:focus-search", null);
+          resolve();
+        }, 0);
+        return;
+      }
+      sendToRenderer("viewer:focus-search", null);
+      resolve();
+    });
+  });
+}
+
+function registerDocumentFocusSearchShortcut(contents: Electron.WebContents): void {
   contents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") {
       return;
     }
     if ((input.control || input.meta) && input.key.toLowerCase() === "f") {
       event.preventDefault();
-      focusSearchInRenderer();
+      setTimeout(() => focusSearchInRenderer(), 0);
     }
+  });
+
+  contents.on("focus", () => {
+    if (Date.now() >= searchFocusLockUntil) {
+      return;
+    }
+    setImmediate(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        return;
+      }
+      if (process.platform === "darwin") {
+        app.focus({ steal: true });
+      }
+      mainWindow.focus();
+      mainWindow.webContents.focus();
+      sendToRenderer("viewer:focus-search", null);
+    });
   });
 }
 
@@ -224,7 +295,7 @@ function createDocumentView(): WebContentsView {
     sendToRenderer("viewer:find-result", payload);
   });
 
-  registerFocusSearchShortcut(view.webContents);
+  registerDocumentFocusSearchShortcut(view.webContents);
 
   return view;
 }
@@ -266,7 +337,6 @@ async function createMainWindow(): Promise<void> {
 
   await mainWindow.loadURL(rendererUrl);
   lockRendererZoom(mainWindow);
-  registerFocusSearchShortcut(mainWindow.webContents);
 }
 
 async function stopLocalServer(): Promise<void> {
@@ -377,9 +447,25 @@ ipcMain.handle("search:query", (_event, query: string, matchCase: boolean) => {
     }
   );
 });
-ipcMain.handle("viewer:find-in-page", (_event, request: FindRequest) => {
+ipcMain.handle("viewer:focus-search", (_event, clickPoint?: InputPoint) =>
+  focusSearchInRenderer(clickPoint)
+);
+ipcMain.handle("viewer:find-in-page", async (_event, request: FindRequest) => {
   if (!documentView || !request.query) {
     return;
+  }
+  if (request.findNext) {
+    // Blink starts find-in-page from the current selection. For a new search
+    // session we clear the selection first so the search begins from the top
+    // and lands on the first match. See electron/electron#34490.
+    try {
+      await documentView.webContents.executeJavaScript(
+        "window.getSelection && window.getSelection().removeAllRanges();",
+        true
+      );
+    } catch {
+      // The document may not be ready yet; ignore and search anyway.
+    }
   }
   documentView.webContents.findInPage(request.query, {
     forward: request.forward,
