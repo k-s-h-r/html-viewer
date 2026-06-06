@@ -2,24 +2,93 @@
 <html lang="ja">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>セットアップ</title>
     <link rel="stylesheet" href="../assets/styles.css" />
   </head>
   <body>
-    <article class="slide">
-      <h1>セットアップ</h1>
-      <p>
-        入力単位は1仕様書1フォルダです。ビューワーはフォルダ直下の index.html を目次として読み、
-        目次に載っているHTMLリンクだけをページ一覧にします。
-      </p>
-      <section>
-        <h2>ローカル配信</h2>
-        <p>
-          選択フォルダは 127.0.0.1 にだけバインドしたローカルHTTPサーバーから配信します。
-          ルート外に出るパスは拒否されます。
+    <div class="doc">
+      <header class="doc-header">
+        <p class="doc-eyebrow">第2章</p>
+        <h1 class="doc-title">セットアップ</h1>
+        <p class="doc-lead">
+          仕様書フォルダの構成ルールと、ビューワーがコンテンツを安全に配信する仕組みを説明します。
         </p>
-      </section>
-      <p><a href="search.html#catalog">検索の説明へ</a></p>
-    </article>
+        <ul class="doc-meta">
+          <li>カテゴリ: <b>セットアップ</b></li>
+          <li>対象: <b>仕様書の作成者</b></li>
+        </ul>
+      </header>
+
+      <main class="doc-body">
+        <section class="doc-section" id="folder">
+          <h2><span class="sec-no">2.1</span>フォルダ構成</h2>
+          <p>
+            入力単位は「1仕様書 = 1フォルダ」です。ビューワーはフォルダ直下の
+            <code>index.html</code> を目次として読み込み、目次に載っているHTMLリンクだけを
+            ページ一覧に並べます。サブフォルダ内のHTMLも対象です。
+          </p>
+          <pre><code>basic/
+├─ index.html        # 目次
+├─ intro.html        # 第1章
+└─ chapters/
+   ├─ setup.html     # 第2章
+   └─ search.html    # 第3章</code></pre>
+        </section>
+
+        <section class="doc-section" id="serving">
+          <h2><span class="sec-no">2.2</span>ローカル配信</h2>
+          <p>
+            選択フォルダは <code>127.0.0.1</code> にだけバインドしたローカルHTTPサーバーから配信されます。
+            外部ネットワークには公開されず、ルート外へ出るパスは拒否されます。
+          </p>
+          <table class="spec-table">
+            <caption>リンク種別の扱い</caption>
+            <thead>
+              <tr>
+                <th>種別</th>
+                <th>挙動</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>フォルダ内 <code>.html</code></td>
+                <td>有効なページとして閲覧できます。</td>
+              </tr>
+              <tr>
+                <td>実ファイルなし</td>
+                <td>一覧に「見つかりません」と表示し、選択不可になります。</td>
+              </tr>
+              <tr>
+                <td>フォルダ外パス</td>
+                <td>一覧に「範囲外」と表示し、選択不可になります。</td>
+              </tr>
+              <tr>
+                <td><code>https://</code> 外部URL</td>
+                <td>通常ブラウザで開きます。</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="callout is-warning">
+            <p>
+              <span class="callout-title">注意</span>
+              <code>../</code> などでフォルダ外を参照するリンクは安全のため無効化されます。
+              リンク先は必ず仕様書フォルダ内に配置してください。
+            </p>
+          </div>
+        </section>
+
+        <nav class="doc-nav">
+          <a href="../intro.html">
+            <span class="nav-label">前のページ</span>
+            <span class="nav-title">← 概要</span>
+          </a>
+          <a class="is-next" href="search.html#catalog">
+            <span class="nav-label">次のページ</span>
+            <span class="nav-title">検索 →</span>
+          </a>
+        </nav>
+      </main>
+    </div>
   </body>
 </html>

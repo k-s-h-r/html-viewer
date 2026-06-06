@@ -1,4 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  CaseSensitive,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  ExternalLink,
+  FileText,
+  FileWarning,
+  FileX,
+  FolderOpen,
+  History,
+  Maximize2,
+  Minimize2,
+  Minus,
+  PanelLeft,
+  Plus,
+  Search,
+  X
+} from "lucide-react";
 import type {
   Deck,
   DeckPage,
@@ -7,6 +27,26 @@ import type {
   RecentFolder,
   SearchResult
 } from "../shared/types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 const EMPTY_SEARCH: SearchResult = {
   query: "",
@@ -36,6 +76,19 @@ function statusLabel(page: DeckPage): string {
     return "外部リンク";
   }
   return page.path;
+}
+
+function pageIcon(page: DeckPage) {
+  if (page.kind === "missing") {
+    return <FileX className="size-3.5" />;
+  }
+  if (page.kind === "out-of-scope") {
+    return <FileWarning className="size-3.5" />;
+  }
+  if (page.kind === "external") {
+    return <ExternalLink className="size-3.5" />;
+  }
+  return <FileText className="size-3.5" />;
 }
 
 function clampZoom(value: number): number {
@@ -390,213 +443,436 @@ export default function App() {
     });
   };
 
+  const showSidebar = sidebarVisible && !focusMode;
+  const showResults = Boolean(searchQuery.trim());
+  const findCounter =
+    findResult && findResult.matches > 0
+      ? `${findResult.activeMatchOrdinal}/${findResult.matches}`
+      : null;
+
   return (
-    <div className={`app-shell ${focusMode ? "is-focus-mode" : ""}`}>
-      <header className="toolbar">
-        <div className="toolbar-group">
-          <button className="button primary" onClick={openFolder}>
-            フォルダを開く
-          </button>
-          <select
-            className="select"
-            aria-label="最近使ったフォルダ"
-            defaultValue=""
-            onChange={(event) => {
-              const folderPath = event.currentTarget.value;
-              event.currentTarget.value = "";
-              if (folderPath) {
-                void openRecentFolder(folderPath);
-              }
-            }}
+    <TooltipProvider delay={300}>
+      <div
+        data-testid="app-shell"
+        data-focus-mode={focusMode}
+        className="flex h-full w-full min-w-[960px] flex-col overflow-hidden bg-muted/40 text-foreground"
+      >
+        {!focusMode ? (
+          <header
+            data-testid="toolbar"
+            className="flex h-14 shrink-0 items-center gap-2 border-b bg-background px-3"
           >
-            <option value="">最近使ったフォルダ</option>
-            {recentFolders.map((folder) => (
-              <option key={folder.path} value={folder.path}>
-                {folder.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="toolbar-group search-group">
-          <input
-            ref={searchInputRef}
-            className="search-input"
-            placeholder="検索..."
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                navigateSearchAcrossPages(!event.shiftKey);
-              }
-            }}
-          />
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={matchCase}
-              onChange={(event) => setMatchCase(event.currentTarget.checked)}
-            />
-            大文字小文字
-          </label>
-          <button className="button" onClick={() => navigateSearchAcrossPages(false)}>
-            前へ
-          </button>
-          <button className="button" onClick={() => navigateSearchAcrossPages(true)}>
-            次へ
-          </button>
-        </div>
-
-        <div className="toolbar-group">
-          <button className="button" onClick={() => navigateByOffset(-1)}>
-            ←
-          </button>
-          <span className="page-counter">
-            {selectedPageNumber || "-"} / {navigablePages.length || "-"}
-          </span>
-          <button className="button" onClick={() => navigateByOffset(1)}>
-            →
-          </button>
-          <button className="button" onClick={() => void setZoomFactor(zoom - 0.1)}>
-            −
-          </button>
-          <button className="button" onClick={() => void setZoomFactor(1)}>
-            {Math.round(zoom * 100)}%
-          </button>
-          <button className="button" onClick={() => void setZoomFactor(zoom + 0.1)}>
-            ＋
-          </button>
-          <button className="button" onClick={() => setSidebarVisible((visible) => !visible)}>
-            サイドバー
-          </button>
-          <button className="button" onClick={() => setFocusMode((enabled) => !enabled)}>
-            集中
-          </button>
-        </div>
-      </header>
-
-      {error ? <div className="error-banner">{error}</div> : null}
-      {deck?.warning ? <div className="warning-banner">{deck.warning}</div> : null}
-
-      <main className={`workspace ${!sidebarVisible || focusMode ? "sidebar-hidden" : ""}`}>
-        {sidebarVisible && !focusMode ? (
-          <aside className="sidebar">
-            <div className="pane-title">
-              <span>{deck?.rootName ?? "仕様書未選択"}</span>
-              {deck ? <small>{deck.hasToc ? "index.html 目次" : "フォールバック"}</small> : null}
-            </div>
-            <div className="page-list">
-              {deck ? (
-                deck.pages.map((page, index) => {
-                  const isSelected = page.path === selectedPath;
-                  const isExpanded = expandedPages.has(page.id);
-                  return (
-                    <div
-                      key={page.id}
-                      className={`page-row ${isSelected ? "is-selected" : ""} ${
-                        !canNavigate(page) ? "is-disabled" : ""
-                      }`}
+            <div className="flex items-center gap-1.5">
+              <Button size="sm" onClick={openFolder}>
+                <FolderOpen />
+                フォルダを開く
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      disabled={recentFolders.length === 0}
+                      aria-label="最近使ったフォルダ"
                     >
-                      <button
-                        className="page-main"
-                        disabled={!canNavigate(page)}
-                        onClick={() => void navigateTo(page)}
+                      <History />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="start" className="w-64">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>最近使ったフォルダ</DropdownMenuLabel>
+                    {recentFolders.map((folder) => (
+                      <DropdownMenuItem
+                        key={folder.path}
+                        onClick={() => void openRecentFolder(folder.path)}
                       >
-                        <span className="page-number">{index + 1}</span>
-                        <span className="page-text">
-                          <strong>{page.title}</strong>
-                          <small>{statusLabel(page)}</small>
-                        </span>
-                      </button>
-                      {page.anchors.length > 0 ? (
-                        <button
-                          className="anchor-toggle"
-                          aria-label="アンカーを表示"
-                          onClick={() => toggleExpanded(page.id)}
-                        >
-                          {isExpanded ? "▾" : "▸"}
-                        </button>
-                      ) : null}
-                      {isExpanded ? (
-                        <div className="anchor-list">
-                          {page.anchors.map((anchor) => (
-                            <button
-                              key={anchor.id}
-                              className={`anchor-row ${
-                                isSelected && selectedHash === anchor.hash ? "is-selected" : ""
-                              }`}
-                              onClick={() => void navigateTo(page, anchor.href)}
-                            >
-                              {anchor.title}
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="empty-state">
-                  フォルダを開くと、目次からページ一覧を生成します。
-                </p>
-              )}
-            </div>
-          </aside>
-        ) : null}
-
-        <section className="viewer-shell">
-          {!deck ? (
-            <div className="welcome">
-              <h1>HTML仕様書ビューワー</h1>
-              <p>静的HTML仕様書フォルダを開くと、PPTのようにページ移動・検索できます。</p>
-              <button className="button primary" onClick={openFolder}>
-                仕様書フォルダを開く
-              </button>
-            </div>
-          ) : null}
-          <div ref={viewerHostRef} className="browser-view-host" />
-        </section>
-
-        {searchQuery.trim() ? (
-          <aside className="results-pane">
-            <div className="pane-title">
-              <span>検索結果</span>
-              <small>{searchResult.totalHits} 件</small>
-            </div>
-            {searchResult.pages.length > 0 ? (
-              <div className="result-list">
-                {searchResult.pages.map((pageResult) => (
-                  <section key={pageResult.pageId} className="result-page">
-                    <button
-                      className="result-page-title"
-                      onClick={() => {
-                        navigateToSearchTarget(pageResult.pagePath, "first");
-                      }}
-                    >
-                      <strong>{pageResult.pageTitle}</strong>
-                      <span>{pageResult.count} 件</span>
-                    </button>
-                    {pageResult.hits.slice(0, 5).map((hit) => (
-                      <button
-                        key={hit.id}
-                        className="result-hit"
-                        onClick={() => {
-                          navigateToSearchTarget(hit.pagePath, "first", hit.ordinal);
-                        }}
-                      >
-                        {hit.snippet}
-                      </button>
+                        <FolderOpen className="text-muted-foreground" />
+                        <span className="truncate">{folder.name}</span>
+                      </DropdownMenuItem>
                     ))}
-                  </section>
-                ))}
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            <Separator orientation="vertical" className="mx-1 h-6" />
+
+            <div className="flex min-w-[320px] flex-1 items-center gap-1.5">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  ref={searchInputRef}
+                  className="pl-8"
+                  placeholder="検索...  (Ctrl+F)"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      navigateSearchAcrossPages(!event.shiftKey);
+                    }
+                  }}
+                />
+                {findCounter ? (
+                  <span className="absolute top-1/2 right-2.5 -translate-y-1/2 text-xs tabular-nums text-muted-foreground">
+                    {findCounter}
+                  </span>
+                ) : null}
               </div>
-            ) : (
-              <p className="empty-state">一致するページはありません。</p>
-            )}
-          </aside>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant={matchCase ? "secondary" : "ghost"}
+                      size="icon-sm"
+                      aria-pressed={matchCase}
+                      onClick={() => setMatchCase((value) => !value)}
+                    >
+                      <CaseSensitive />
+                    </Button>
+                  }
+                />
+                <TooltipContent>大文字小文字を区別</TooltipContent>
+              </Tooltip>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                disabled={!showResults}
+                aria-label="前のヒット"
+                onClick={() => navigateSearchAcrossPages(false)}
+              >
+                <ChevronUp />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                disabled={!showResults}
+                aria-label="次のヒット"
+                onClick={() => navigateSearchAcrossPages(true)}
+              >
+                <ChevronDown />
+              </Button>
+            </div>
+
+            <Separator orientation="vertical" className="mx-1 h-6" />
+
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                disabled={!deck}
+                aria-label="前のページ"
+                onClick={() => navigateByOffset(-1)}
+              >
+                <ChevronLeft />
+              </Button>
+              <span className="min-w-[64px] text-center text-sm tabular-nums text-muted-foreground">
+                {selectedPageNumber || "-"} / {navigablePages.length || "-"}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                disabled={!deck}
+                aria-label="次のページ"
+                onClick={() => navigateByOffset(1)}
+              >
+                <ChevronRight />
+              </Button>
+
+              <Separator orientation="vertical" className="mx-1 h-6" />
+
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="縮小"
+                onClick={() => void setZoomFactor(zoom - 0.1)}
+              >
+                <Minus />
+              </Button>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="min-w-[52px] tabular-nums"
+                      onClick={() => void setZoomFactor(1)}
+                    >
+                      {Math.round(zoom * 100)}%
+                    </Button>
+                  }
+                />
+                <TooltipContent>100%に戻す</TooltipContent>
+              </Tooltip>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="拡大"
+                onClick={() => void setZoomFactor(zoom + 0.1)}
+              >
+                <Plus />
+              </Button>
+
+              <Separator orientation="vertical" className="mx-1 h-6" />
+
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant={sidebarVisible ? "secondary" : "ghost"}
+                      size="icon-sm"
+                      aria-pressed={sidebarVisible}
+                      aria-label="サイドバー"
+                      onClick={() => setSidebarVisible((visible) => !visible)}
+                    >
+                      <PanelLeft />
+                    </Button>
+                  }
+                />
+                <TooltipContent>サイドバー</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="集中モード"
+                      onClick={() => setFocusMode((enabled) => !enabled)}
+                    >
+                      <Maximize2 />
+                    </Button>
+                  }
+                />
+                <TooltipContent>集中モード</TooltipContent>
+              </Tooltip>
+            </div>
+          </header>
         ) : null}
-      </main>
-    </div>
+
+        {error ? (
+          <div className="flex items-center gap-2 border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+            <FileX className="size-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        ) : null}
+        {deck?.warning ? (
+          <div className="flex items-center gap-2 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+            <FileWarning className="size-4 shrink-0" />
+            <span>{deck.warning}</span>
+          </div>
+        ) : null}
+
+        <main className={cn("flex min-h-0 flex-1 gap-3", focusMode ? "p-0" : "p-3")}>
+          {showSidebar ? (
+            <aside className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+              <div className="flex items-baseline justify-between gap-2 border-b px-4 py-3">
+                <span className="truncate text-sm font-semibold">
+                  {deck?.rootName ?? "仕様書未選択"}
+                </span>
+                {deck ? (
+                  <Badge variant="secondary" className="shrink-0">
+                    {deck.hasToc ? "目次" : "フォールバック"}
+                  </Badge>
+                ) : null}
+              </div>
+              <ScrollArea className="flex-1">
+                <div className="flex flex-col gap-0.5 p-2">
+                  {deck ? (
+                    deck.pages.map((page, index) => {
+                      const isSelected = page.path === selectedPath;
+                      const isExpanded = expandedPages.has(page.id);
+                      const disabled = !canNavigate(page);
+                      return (
+                        <div key={page.id} data-testid="page-row">
+                          <div className="group/row relative flex items-stretch">
+                            <button
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => void navigateTo(page)}
+                              className={cn(
+                                "flex min-h-[52px] w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors",
+                                page.anchors.length > 0 ? "pr-9" : "pr-2",
+                                disabled
+                                  ? "cursor-not-allowed opacity-50"
+                                  : "hover:bg-accent",
+                                isSelected && "bg-accent"
+                              )}
+                            >
+                              <span
+                                className={cn(
+                                  "flex size-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold tabular-nums",
+                                  isSelected
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-muted text-muted-foreground"
+                                )}
+                              >
+                                {index + 1}
+                              </span>
+                              <span className="flex min-w-0 flex-col">
+                                <span className="truncate text-sm font-medium">{page.title}</span>
+                                <span className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+                                  {pageIcon(page)}
+                                  <span className="truncate">{statusLabel(page)}</span>
+                                </span>
+                              </span>
+                            </button>
+                            {page.anchors.length > 0 ? (
+                              <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                aria-label="アンカーを表示"
+                                className="absolute top-1/2 right-1.5 -translate-y-1/2 text-muted-foreground"
+                                onClick={() => toggleExpanded(page.id)}
+                              >
+                                <ChevronRight
+                                  className={cn("transition-transform", isExpanded && "rotate-90")}
+                                />
+                              </Button>
+                            ) : null}
+                          </div>
+                          {isExpanded ? (
+                            <div className="ml-[26px] flex flex-col gap-0.5 border-l py-0.5 pl-2">
+                              {page.anchors.map((anchor) => {
+                                const anchorSelected =
+                                  isSelected && selectedHash === anchor.hash;
+                                return (
+                                  <button
+                                    key={anchor.id}
+                                    type="button"
+                                    onClick={() => void navigateTo(page, anchor.href)}
+                                    className={cn(
+                                      "truncate rounded-md px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-accent",
+                                      anchorSelected
+                                        ? "bg-accent font-medium text-accent-foreground"
+                                        : "text-muted-foreground"
+                                    )}
+                                  >
+                                    {anchor.title}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="px-3 py-6 text-sm text-muted-foreground">
+                      フォルダを開くと、目次からページ一覧を生成します。
+                    </p>
+                  )}
+                </div>
+              </ScrollArea>
+            </aside>
+          ) : null}
+
+          <section
+            className={cn(
+              "relative min-h-0 min-w-0 flex-1 overflow-hidden border bg-card",
+              focusMode ? "rounded-none border-0" : "rounded-xl shadow-sm"
+            )}
+          >
+            {!deck ? (
+              <div className="absolute inset-0 z-1 grid place-content-center gap-4 p-10 text-center">
+                <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <FileText className="size-7" />
+                </div>
+                <div className="space-y-2">
+                  <h1 className="text-2xl font-bold tracking-tight">HTML仕様書ビューワー</h1>
+                  <p className="mx-auto max-w-md text-sm text-muted-foreground">
+                    静的HTML仕様書フォルダを開くと、PPTのようにページ移動・検索できます。
+                  </p>
+                </div>
+                <div className="flex justify-center">
+                  <Button onClick={openFolder}>
+                    <FolderOpen />
+                    仕様書フォルダを開く
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+            <div ref={viewerHostRef} className="absolute inset-0" />
+            {focusMode ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="absolute top-3 right-3 z-2 shadow-md"
+                      aria-label="集中モードを解除"
+                      onClick={() => setFocusMode(false)}
+                    >
+                      <Minimize2 />
+                    </Button>
+                  }
+                />
+                <TooltipContent side="left">集中モードを解除 (Esc)</TooltipContent>
+              </Tooltip>
+            ) : null}
+          </section>
+
+          {showResults ? (
+            <aside
+              data-testid="results-pane"
+              className="flex w-80 shrink-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm"
+            >
+              <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
+                <span className="text-sm font-semibold">検索結果</span>
+                <Badge variant="secondary" data-testid="results-total">
+                  {searchResult.totalHits} 件
+                </Badge>
+              </div>
+              {searchResult.pages.length > 0 ? (
+                <ScrollArea className="flex-1">
+                  <div className="flex flex-col gap-1 p-2">
+                    {searchResult.pages.map((pageResult) => (
+                      <section
+                        key={pageResult.pageId}
+                        data-testid="result-page"
+                        className="flex flex-col gap-0.5"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => navigateToSearchTarget(pageResult.pagePath, "first")}
+                          className="flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-accent"
+                        >
+                          <strong className="truncate text-sm font-medium">
+                            {pageResult.pageTitle}
+                          </strong>
+                          <Badge variant="outline" className="shrink-0">
+                            {pageResult.count}
+                          </Badge>
+                        </button>
+                        {pageResult.hits.slice(0, 5).map((hit) => (
+                          <button
+                            key={hit.id}
+                            type="button"
+                            onClick={() =>
+                              navigateToSearchTarget(hit.pagePath, "first", hit.ordinal)
+                            }
+                            className="ml-2 rounded-md px-2.5 py-1.5 text-left text-xs leading-relaxed text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                          >
+                            {hit.snippet}
+                          </button>
+                        ))}
+                      </section>
+                    ))}
+                  </div>
+                </ScrollArea>
+              ) : (
+                <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
+                  <X className="size-5" />
+                  <span>一致するページはありません。</span>
+                </div>
+              )}
+            </aside>
+          ) : null}
+        </main>
+      </div>
+    </TooltipProvider>
   );
 }

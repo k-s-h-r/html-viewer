@@ -1,4 +1,6 @@
 import path from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import {
   test,
@@ -12,61 +14,214 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const sampleDeck = path.join(rootDir, "sample-decks/basic");
 const appEntry = path.join(rootDir, "dist-electron/main/index.js");
 
-async function launchApp(): Promise<{ electronApp: ElectronApplication; window: Page }> {
+type BrowserViewState = {
+  url: string;
+  bounds: { width: number; height: number };
+};
+
+async function launchApp(options?: {
+  userDataDir?: string;
+  openFolder?: string;
+}): Promise<{ electronApp: ElectronApplication; window: Page; userDataDir: string }> {
+  const userDataDir =
+    options?.userDataDir ?? (await mkdtemp(path.join(tmpdir(), "html-viewer-e2e-")));
+
   const electronApp = await electron.launch({
-    args: [appEntry],
+    args: [appEntry, `--user-data-dir=${userDataDir}`],
     cwd: rootDir,
     env: {
       ...process.env,
-      HTML_VIEWER_OPEN_FOLDER: sampleDeck
+      HTML_VIEWER_OPEN_FOLDER: options?.openFolder ?? sampleDeck
     }
   });
 
   const window = await electronApp.firstWindow();
   await window.waitForLoadState("domcontentloaded");
 
-  return { electronApp, window };
+  return { electronApp, window, userDataDir };
 }
 
-async function getBrowserViewUrl(electronApp: ElectronApplication): Promise<string> {
+async function getBrowserViewState(electronApp: ElectronApplication): Promise<BrowserViewState> {
   return electronApp.evaluate(({ BrowserWindow }) => {
     const win = BrowserWindow.getAllWindows()[0];
     const view = win?.getBrowserView();
-    return view?.webContents.getURL() ?? "";
+    if (!view) {
+      return { url: "", bounds: { width: 0, height: 0 } };
+    }
+    return {
+      url: view.webContents.getURL(),
+      bounds: view.getBounds()
+    };
   });
+}
+
+async function expectUiIntact(window: Page, electronApp: ElectronApplication): Promise<void> {
+  await expect(window.getByTestId("app-shell")).toBeVisible();
+  await expect(window.getByTestId("toolbar")).toBeVisible();
+
+  const view = await getBrowserViewState(electronApp);
+  expect(view.bounds.width, "BrowserView width").toBeGreaterThan(100);
+  expect(view.bounds.height, "BrowserView height").toBeGreaterThan(100);
+  expect(view.url, "BrowserView URL").toMatch(/127\.0\.0\.1/);
+}
+
+async function waitForBrowserViewUrl(
+  electronApp: ElectronApplication,
+  pattern: RegExp
+): Promise<void> {
+  await expect
+    .poll(async () => (await getBrowserViewState(electronApp)).url, { timeout: 15_000 })
+    .toMatch(pattern);
 }
 
 test.describe("HTML Viewer", () => {
   test("launches, lists pages, searches, toggles focus mode, and loads BrowserView", async () => {
-    const { electronApp, window } = await launchApp();
+    const { electronApp, window, userDataDir } = await launchApp();
 
     try {
       await expect(window).toHaveTitle("HTML仕様書ビューワー");
-      await expect(window.locator(".app-shell")).toBeVisible();
+      await expect(window.getByTestId("app-shell")).toBeVisible();
 
-      const pageRows = window.locator(".page-list .page-row");
+      const pageRows = window.getByTestId("page-row");
       await expect(pageRows).toHaveCount(6);
       await expect(window.getByRole("button", { name: /概要/ })).toBeVisible();
       await expect(window.getByRole("button", { name: /セットアップ/ })).toBeVisible();
 
-      await expect
-        .poll(async () => getBrowserViewUrl(electronApp), { timeout: 15_000 })
-        .toMatch(/intro\.html/i);
+      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+      await expectUiIntact(window, electronApp);
 
-      await window.locator(".search-input").fill("検索");
-      await expect(window.locator(".results-pane")).toBeVisible();
-      await expect(window.locator(".result-list .result-page").first()).toBeVisible();
-      await expect(window.locator(".results-pane small")).not.toHaveText("0 件");
+      await window.getByPlaceholder(/検索/).fill("検索");
+      await expect(window.getByTestId("results-pane")).toBeVisible();
+      await expect(window.getByTestId("result-page").first()).toBeVisible();
+      await expect(window.getByTestId("results-total")).not.toHaveText("0 件");
 
-      await window.getByRole("button", { name: "集中", exact: true }).click();
-      await expect(window.locator(".app-shell")).toHaveClass(/is-focus-mode/);
-      await expect(window.locator(".toolbar")).toBeHidden();
+      await window.getByRole("button", { name: "集中モード", exact: true }).click();
+      await expect(window.getByTestId("app-shell")).toHaveAttribute("data-focus-mode", "true");
+      await expect(window.getByTestId("toolbar")).toBeHidden();
 
       await window.keyboard.press("Escape");
-      await expect(window.locator(".app-shell")).not.toHaveClass(/is-focus-mode/);
-      await expect(window.locator(".toolbar")).toBeVisible();
+      await expect(window.getByTestId("app-shell")).toHaveAttribute("data-focus-mode", "false");
+      await expect(window.getByTestId("toolbar")).toBeVisible();
     } finally {
       await electronApp.close();
+      await rm(userDataDir, { recursive: true, force: true });
+    }
+  });
+
+  test("history dropdown keeps the UI and BrowserView visible", async () => {
+    const { electronApp, window, userDataDir } = await launchApp();
+
+    try {
+      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+      await expectUiIntact(window, electronApp);
+
+      const historyButton = window.getByRole("button", { name: "最近使ったフォルダ" });
+      await expect(historyButton).toBeEnabled();
+
+      await historyButton.click();
+      await expect(window.getByText("最近使ったフォルダ", { exact: true })).toBeVisible();
+      await expect(window.getByRole("menuitem", { name: "basic" })).toBeVisible();
+      await expectUiIntact(window, electronApp);
+
+      await window.keyboard.press("Escape");
+      await expect(window.getByRole("menuitem", { name: "basic" })).toBeHidden();
+      await expectUiIntact(window, electronApp);
+
+      await historyButton.click();
+      await window.getByRole("menuitem", { name: "basic" }).click();
+
+      await expect(window.getByTestId("page-row")).toHaveCount(6);
+      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+      await expectUiIntact(window, electronApp);
+    } finally {
+      await electronApp.close();
+      await rm(userDataDir, { recursive: true, force: true });
+    }
+  });
+
+  test("toolbar navigation and sidebar toggle keep the viewer visible", async () => {
+    const { electronApp, window, userDataDir } = await launchApp();
+
+    try {
+      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+
+      await window.getByRole("button", { name: /セットアップ/ }).click();
+      await waitForBrowserViewUrl(electronApp, /setup\.html/i);
+      await expectUiIntact(window, electronApp);
+
+      await window.getByRole("button", { name: "次のページ" }).click();
+      await waitForBrowserViewUrl(electronApp, /search\.html/i);
+      await expectUiIntact(window, electronApp);
+
+      await window.getByRole("button", { name: "前のページ" }).click();
+      await waitForBrowserViewUrl(electronApp, /setup\.html/i);
+      await expectUiIntact(window, electronApp);
+
+      const sidebarButton = window.getByRole("button", { name: "サイドバー" });
+      await sidebarButton.click();
+      await expect(window.getByTestId("page-row")).toBeHidden();
+      await expectUiIntact(window, electronApp);
+
+      await sidebarButton.click();
+      await expect(window.getByTestId("page-row").first()).toBeVisible();
+      await expectUiIntact(window, electronApp);
+    } finally {
+      await electronApp.close();
+      await rm(userDataDir, { recursive: true, force: true });
+    }
+  });
+
+  test("zoom controls update percentage without breaking the viewer", async () => {
+    const { electronApp, window, userDataDir } = await launchApp();
+
+    try {
+      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+      await expectUiIntact(window, electronApp);
+
+      await expect(window.getByRole("button", { name: "100%" })).toBeVisible();
+
+      await window.getByRole("button", { name: "拡大" }).click();
+      await expect(window.getByRole("button", { name: "110%" })).toBeVisible();
+      await expectUiIntact(window, electronApp);
+
+      await window.getByRole("button", { name: "110%" }).click();
+      await expect(window.getByRole("button", { name: "100%" })).toBeVisible();
+      await expectUiIntact(window, electronApp);
+
+      await window.getByRole("button", { name: "縮小" }).click();
+      await expect(window.getByRole("button", { name: "90%" })).toBeVisible();
+      await expectUiIntact(window, electronApp);
+    } finally {
+      await electronApp.close();
+      await rm(userDataDir, { recursive: true, force: true });
+    }
+  });
+
+  test("search can be cleared and anchor navigation keeps the UI intact", async () => {
+    const { electronApp, window, userDataDir } = await launchApp();
+
+    try {
+      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+
+      const searchInput = window.getByPlaceholder(/検索/);
+      await searchInput.fill("検索");
+      await expect(window.getByTestId("results-pane")).toBeVisible();
+      await expectUiIntact(window, electronApp);
+
+      await searchInput.fill("");
+      await expect(window.getByTestId("results-pane")).toBeHidden();
+      await expectUiIntact(window, electronApp);
+
+      const searchPageRow = window
+        .getByTestId("page-row")
+        .filter({ has: window.getByRole("button", { name: /検索/ }) });
+      await searchPageRow.getByRole("button", { name: "アンカーを表示" }).click();
+      await searchPageRow.getByRole("button", { name: /検索: ページ内検索/ }).click();
+      await waitForBrowserViewUrl(electronApp, /search\.html#in-page/i);
+      await expectUiIntact(window, electronApp);
+    } finally {
+      await electronApp.close();
+      await rm(userDataDir, { recursive: true, force: true });
     }
   });
 });

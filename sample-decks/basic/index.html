@@ -2,21 +2,99 @@
 <html lang="ja">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>サンプル仕様書 目次</title>
     <link rel="stylesheet" href="assets/styles.css" />
   </head>
   <body>
-    <main class="toc">
-      <h1>サンプル仕様書</h1>
-      <ol>
-        <li><a href="intro.html">概要</a></li>
-        <li><a href="chapters/setup.html">セットアップ</a></li>
-        <li><a href="chapters/search.html#catalog">検索: 全ページカタログ</a></li>
-        <li><a href="chapters/search.html#in-page">検索: ページ内検索</a></li>
-        <li><a href="missing.html">欠損ページ</a></li>
-        <li><a href="../outside.html">範囲外ページ</a></li>
-        <li><a href="https://developer.mozilla.org/ja/">外部リファレンス</a></li>
-      </ol>
-    </main>
+    <div class="doc">
+      <header class="doc-header">
+        <p class="doc-eyebrow">Specification</p>
+        <h1 class="doc-title">サンプル仕様書</h1>
+        <p class="doc-lead">
+          HTML仕様書ビューワーの動作確認用に用意した最小デッキです。この index.html
+          が目次として読み込まれ、下のリンクがページ一覧になります。
+        </p>
+        <ul class="doc-meta">
+          <li>版: <b>v1.0</b></li>
+          <li>最終更新: <b>2026-06-06</b></li>
+          <li>ページ数: <b>4</b></li>
+        </ul>
+      </header>
+
+      <main class="doc-body">
+        <nav class="doc-section" aria-label="目次">
+          <h2><span class="sec-no">01</span>目次</h2>
+          <ol class="toc-list">
+            <li>
+              <a class="toc-link" href="intro.html">
+                <span class="toc-num">1</span>
+                <span class="toc-body">
+                  <span class="toc-name">概要</span>
+                  <span class="toc-desc">本デッキの目的と全体構成</span>
+                </span>
+              </a>
+            </li>
+            <li>
+              <a class="toc-link" href="chapters/setup.html">
+                <span class="toc-num">2</span>
+                <span class="toc-body">
+                  <span class="toc-name">セットアップ</span>
+                  <span class="toc-desc">フォルダ構成とローカル配信の方針</span>
+                </span>
+              </a>
+            </li>
+            <li>
+              <a class="toc-link" href="chapters/search.html#catalog">
+                <span class="toc-num">3</span>
+                <span class="toc-body">
+                  <span class="toc-name">検索: 全ページカタログ</span>
+                  <span class="toc-desc">仕様書全体を横断する検索インデックス</span>
+                </span>
+              </a>
+            </li>
+            <li>
+              <a class="toc-link" href="chapters/search.html#in-page">
+                <span class="toc-num">4</span>
+                <span class="toc-body">
+                  <span class="toc-name">検索: ページ内検索</span>
+                  <span class="toc-desc">表示中ページのハイライト挙動</span>
+                </span>
+              </a>
+            </li>
+            <li>
+              <a class="toc-link" href="missing.html">
+                <span class="toc-num">—</span>
+                <span class="toc-body">
+                  <span class="toc-name">欠損ページ</span>
+                  <span class="toc-desc">実ファイルが存在しないリンクの例</span>
+                </span>
+                <span class="toc-tag is-external">未検出</span>
+              </a>
+            </li>
+            <li>
+              <a class="toc-link" href="../outside.html">
+                <span class="toc-num">—</span>
+                <span class="toc-body">
+                  <span class="toc-name">範囲外ページ</span>
+                  <span class="toc-desc">フォルダ外を参照するリンクの例</span>
+                </span>
+                <span class="toc-tag is-external">範囲外</span>
+              </a>
+            </li>
+            <li>
+              <a class="toc-link" href="https://developer.mozilla.org/ja/">
+                <span class="toc-num">↗</span>
+                <span class="toc-body">
+                  <span class="toc-name">外部リファレンス</span>
+                  <span class="toc-desc">通常ブラウザで開く外部リンクの例</span>
+                </span>
+                <span class="toc-tag is-external">外部リンク</span>
+              </a>
+            </li>
+          </ol>
+        </nav>
+      </main>
+    </div>
   </body>
 </html>

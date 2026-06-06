@@ -2,20 +2,62 @@
 <html lang="ja">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>概要</title>
     <link rel="stylesheet" href="assets/styles.css" />
   </head>
   <body>
-    <article class="slide">
-      <h1>概要</h1>
-      <p>
-        このサンプルは、静的HTML仕様書をページ単位で閲覧するための最小デッキです。
-        左右キーでページ移動し、検索ボックスから仕様書全体を検索できます。
-      </p>
-      <p>
-        次のページでは、フォルダ構成とローカル配信の方針を説明します。
-        <a href="chapters/setup.html">セットアップへ進む</a>
-      </p>
-    </article>
+    <div class="doc">
+      <header class="doc-header">
+        <p class="doc-eyebrow">第1章</p>
+        <h1 class="doc-title">概要</h1>
+        <p class="doc-lead">
+          このサンプルは、静的HTML仕様書をページ単位で閲覧するための最小デッキです。
+          ビューワーの基本操作と、デッキを構成するページの考え方を説明します。
+        </p>
+        <ul class="doc-meta">
+          <li>カテゴリ: <b>イントロダクション</b></li>
+          <li>所要時間: <b>約2分</b></li>
+        </ul>
+      </header>
+
+      <main class="doc-body">
+        <section class="doc-section" id="purpose">
+          <h2><span class="sec-no">1.1</span>このデッキの目的</h2>
+          <p>
+            HTML仕様書ビューワーは、任意フォルダ内の静的HTMLを「プレゼンテーションのページ」のように
+            順番に閲覧し、仕様書全体を横断検索するためのツールです。本デッキはその挙動を確認するための
+            サンプルとして用意されています。
+          </p>
+          <ul>
+            <li><strong>左右キー</strong>でページを前後に移動できます。</li>
+            <li>ツールバーの<strong>検索ボックス</strong>から仕様書全体を検索できます。</li>
+            <li><strong>集中モード</strong>でサイドバーを隠し、本文を広く表示できます。</li>
+          </ul>
+        </section>
+
+        <section class="doc-section" id="structure">
+          <h2><span class="sec-no">1.2</span>デッキの構成</h2>
+          <p>
+            1つの仕様書は1つのフォルダに対応します。フォルダ直下の <code>index.html</code> が目次として
+            読み込まれ、目次に記載されたリンクがページ一覧になります。
+          </p>
+          <div class="callout">
+            <p>
+              <span class="callout-title">補足</span>
+              目次に同じファイルへのリンクが複数あっても、ページ一覧では1ページに統合されます。
+              アンカー（<code>#section</code>）はページ内の見出しとして展開できます。
+            </p>
+          </div>
+        </section>
+
+        <nav class="doc-nav">
+          <a class="is-next" href="chapters/setup.html">
+            <span class="nav-label">次のページ</span>
+            <span class="nav-title">セットアップ →</span>
+          </a>
+        </nav>
+      </main>
+    </div>
   </body>
 </html>
