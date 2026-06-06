@@ -44,7 +44,8 @@ const api: ViewerApi = {
   onFindResult: (callback: (result: FindResult) => void) =>
     on("viewer:find-result", callback),
   onZoomChanged: (callback: (factor: number) => void) =>
-    on("viewer:zoom-changed", callback)
+    on("viewer:zoom-changed", callback),
+  onFocusSearch: (callback: () => void) => on("viewer:focus-search", callback)
 };
 
 contextBridge.exposeInMainWorld("viewerApi", api);

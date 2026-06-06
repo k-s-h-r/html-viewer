@@ -99,4 +99,5 @@ export interface ViewerApi {
   onNavigationChanged(callback: (state: NavigationState) => void): () => void;
   onFindResult(callback: (result: FindResult) => void): () => void;
   onZoomChanged(callback: (factor: number) => void): () => void;
+  onFocusSearch(callback: () => void): () => void;
 }

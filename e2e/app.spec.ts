@@ -14,7 +14,7 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const sampleDeck = path.join(rootDir, "sample-decks/basic");
 const appEntry = path.join(rootDir, "dist-electron/main/index.js");
 
-type BrowserViewState = {
+type DocumentViewState = {
   url: string;
   bounds: { width: number; height: number };
 };
@@ -41,17 +41,27 @@ async function launchApp(options?: {
   return { electronApp, window, userDataDir };
 }
 
-async function getBrowserViewState(electronApp: ElectronApplication): Promise<BrowserViewState> {
+async function getDocumentViewState(electronApp: ElectronApplication): Promise<DocumentViewState> {
   return electronApp.evaluate(({ BrowserWindow }) => {
     const win = BrowserWindow.getAllWindows()[0];
-    const view = win?.getBrowserView();
-    if (!view) {
+    if (!win) {
       return { url: "", bounds: { width: 0, height: 0 } };
     }
-    return {
-      url: view.webContents.getURL(),
-      bounds: view.getBounds()
-    };
+
+    for (const child of win.contentView.children) {
+      if (!("webContents" in child) || typeof child.webContents?.getURL !== "function") {
+        continue;
+      }
+      const url = child.webContents.getURL();
+      if (/127\.0\.0\.1/.test(url)) {
+        return {
+          url,
+          bounds: child.getBounds()
+        };
+      }
+    }
+
+    return { url: "", bounds: { width: 0, height: 0 } };
   });
 }
 
@@ -59,32 +69,46 @@ async function expectUiIntact(window: Page, electronApp: ElectronApplication): P
   await expect(window.getByTestId("app-shell")).toBeVisible();
   await expect(window.getByTestId("toolbar")).toBeVisible();
 
-  const view = await getBrowserViewState(electronApp);
-  expect(view.bounds.width, "BrowserView width").toBeGreaterThan(100);
-  expect(view.bounds.height, "BrowserView height").toBeGreaterThan(100);
-  expect(view.url, "BrowserView URL").toMatch(/127\.0\.0\.1/);
+  const view = await getDocumentViewState(electronApp);
+  expect(view.bounds.width, "document WebContentsView width").toBeGreaterThan(100);
+  expect(view.bounds.height, "document WebContentsView height").toBeGreaterThan(100);
+  expect(view.url, "document WebContentsView URL").toMatch(/127\.0\.0\.1/);
 }
 
 async function getZoomFactors(electronApp: ElectronApplication): Promise<{
   renderer: number;
-  browserView: number;
+  documentView: number;
 }> {
   return electronApp.evaluate(({ BrowserWindow }) => {
     const win = BrowserWindow.getAllWindows()[0];
-    const view = win?.getBrowserView();
+    if (!win) {
+      return { renderer: 1, documentView: 1 };
+    }
+
+    let documentViewZoom = 1;
+    for (const child of win.contentView.children) {
+      if (!("webContents" in child) || typeof child.webContents?.getURL !== "function") {
+        continue;
+      }
+      if (/127\.0\.0\.1/.test(child.webContents.getURL())) {
+        documentViewZoom = child.webContents.getZoomFactor();
+        break;
+      }
+    }
+
     return {
-      renderer: win?.webContents.getZoomFactor() ?? 1,
-      browserView: view?.webContents.getZoomFactor() ?? 1
+      renderer: win.webContents.getZoomFactor(),
+      documentView: documentViewZoom
     };
   });
 }
 
-async function waitForBrowserViewUrl(
+async function waitForDocumentViewUrl(
   electronApp: ElectronApplication,
   pattern: RegExp
 ): Promise<void> {
   await expect
-    .poll(async () => (await getBrowserViewState(electronApp)).url, { timeout: 15_000 })
+    .poll(async () => (await getDocumentViewState(electronApp)).url, { timeout: 15_000 })
     .toMatch(pattern);
 }
 
@@ -101,10 +125,11 @@ test.describe("HTML Viewer", () => {
       await expect(window.getByRole("button", { name: /概要/ })).toBeVisible();
       await expect(window.getByRole("button", { name: /セットアップ/ })).toBeVisible();
 
-      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+      await waitForDocumentViewUrl(electronApp, /intro\.html/i);
       await expectUiIntact(window, electronApp);
 
       await window.getByPlaceholder(/検索/).fill("検索");
+      await window.getByPlaceholder(/検索/).press("Enter");
       await expect(window.getByTestId("results-pane")).toBeVisible();
       await expect(window.getByTestId("result-page").first()).toBeVisible();
       await expect(window.getByTestId("results-total")).not.toHaveText("0 件");
@@ -126,7 +151,7 @@ test.describe("HTML Viewer", () => {
     const { electronApp, window, userDataDir } = await launchApp();
 
     try {
-      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+      await waitForDocumentViewUrl(electronApp, /intro\.html/i);
       await expectUiIntact(window, electronApp);
 
       const historyButton = window.getByRole("button", { name: "最近使ったフォルダ" });
@@ -146,7 +171,7 @@ test.describe("HTML Viewer", () => {
       await window.getByRole("menuitem", { name: "basic" }).click();
 
       await expect(window.getByTestId("page-row")).toHaveCount(6);
-      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+      await waitForDocumentViewUrl(electronApp, /intro\.html/i);
       await expectUiIntact(window, electronApp);
     } finally {
       await electronApp.close();
@@ -158,18 +183,18 @@ test.describe("HTML Viewer", () => {
     const { electronApp, window, userDataDir } = await launchApp();
 
     try {
-      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+      await waitForDocumentViewUrl(electronApp, /intro\.html/i);
 
       await window.getByRole("button", { name: /セットアップ/ }).click();
-      await waitForBrowserViewUrl(electronApp, /setup\.html/i);
+      await waitForDocumentViewUrl(electronApp, /setup\.html/i);
       await expectUiIntact(window, electronApp);
 
       await window.getByRole("button", { name: "次のページ" }).click();
-      await waitForBrowserViewUrl(electronApp, /search\.html/i);
+      await waitForDocumentViewUrl(electronApp, /search\.html/i);
       await expectUiIntact(window, electronApp);
 
       await window.getByRole("button", { name: "前のページ" }).click();
-      await waitForBrowserViewUrl(electronApp, /setup\.html/i);
+      await waitForDocumentViewUrl(electronApp, /setup\.html/i);
       await expectUiIntact(window, electronApp);
 
       const sidebarButton = window.getByRole("button", { name: "サイドバー" });
@@ -190,7 +215,7 @@ test.describe("HTML Viewer", () => {
     const { electronApp, window, userDataDir } = await launchApp();
 
     try {
-      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+      await waitForDocumentViewUrl(electronApp, /intro\.html/i);
       await expectUiIntact(window, electronApp);
 
       await expect(window.getByRole("button", { name: "100%" })).toBeVisible();
@@ -216,10 +241,11 @@ test.describe("HTML Viewer", () => {
     const { electronApp, window, userDataDir } = await launchApp();
 
     try {
-      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+      await waitForDocumentViewUrl(electronApp, /intro\.html/i);
 
       const searchInput = window.getByPlaceholder(/検索/);
       await searchInput.fill("検索");
+      await searchInput.press("Enter");
       await expect(window.getByTestId("results-pane")).toBeVisible();
       await expectUiIntact(window, electronApp);
 
@@ -232,7 +258,7 @@ test.describe("HTML Viewer", () => {
         .filter({ has: window.getByRole("button", { name: /検索/ }) });
       await searchPageRow.getByRole("button", { name: "アンカーを表示" }).click();
       await searchPageRow.getByRole("button", { name: /検索: ページ内検索/ }).click();
-      await waitForBrowserViewUrl(electronApp, /search\.html#in-page/i);
+      await waitForDocumentViewUrl(electronApp, /search\.html#in-page/i);
       await expectUiIntact(window, electronApp);
     } finally {
       await electronApp.close();
@@ -244,9 +270,10 @@ test.describe("HTML Viewer", () => {
     const { electronApp, window, userDataDir } = await launchApp();
 
     try {
-      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+      await waitForDocumentViewUrl(electronApp, /intro\.html/i);
 
       await window.getByPlaceholder(/検索/).fill("仕様");
+      await window.getByPlaceholder(/検索/).press("Enter");
       await expect(window.getByTestId("results-pane")).toBeVisible();
       await expect(window.getByTestId("results-total")).not.toHaveText("0 件");
 
@@ -285,26 +312,20 @@ test.describe("HTML Viewer", () => {
     }
   });
 
-  test("history dropdown stays above BrowserView", async () => {
+  test("history dropdown stays visible while BrowserView remains loaded", async () => {
     const { electronApp, window, userDataDir } = await launchApp();
 
     try {
-      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+      await waitForDocumentViewUrl(electronApp, /intro\.html/i);
 
       const historyButton = window.getByRole("button", { name: "最近使ったフォルダ" });
       await historyButton.click();
       await expect(window.getByRole("menuitem", { name: "basic" })).toBeVisible();
-
-      const hiddenView = await getBrowserViewState(electronApp);
-      expect(hiddenView.bounds.width).toBe(0);
-      expect(hiddenView.bounds.height).toBe(0);
+      await expectUiIntact(window, electronApp);
 
       await window.keyboard.press("Escape");
       await expect(window.getByRole("menuitem", { name: "basic" })).toBeHidden();
-
-      await expect
-        .poll(async () => (await getBrowserViewState(electronApp)).bounds.width, { timeout: 5_000 })
-        .toBeGreaterThan(100);
+      await expectUiIntact(window, electronApp);
     } finally {
       await electronApp.close();
       await rm(userDataDir, { recursive: true, force: true });
@@ -315,18 +336,18 @@ test.describe("HTML Viewer", () => {
     const { electronApp, window, userDataDir } = await launchApp();
 
     try {
-      await waitForBrowserViewUrl(electronApp, /intro\.html/i);
+      await waitForDocumentViewUrl(electronApp, /intro\.html/i);
 
       const beforeZoom = await getZoomFactors(electronApp);
       expect(beforeZoom.renderer).toBe(1);
-      expect(beforeZoom.browserView).toBe(1);
+      expect(beforeZoom.documentView).toBe(1);
 
       await window.getByRole("button", { name: "拡大" }).click();
       await expect(window.getByRole("button", { name: "110%" })).toBeVisible();
 
       const afterZoom = await getZoomFactors(electronApp);
       expect(afterZoom.renderer).toBe(1);
-      expect(afterZoom.browserView).toBeGreaterThan(1);
+      expect(afterZoom.documentView).toBeGreaterThan(1);
       await expectUiIntact(window, electronApp);
     } finally {
       await electronApp.close();

@@ -3,12 +3,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   app,
-  BrowserView,
   BrowserWindow,
   dialog,
   ipcMain,
   Menu,
-  shell
+  shell,
+  WebContentsView
 } from "electron";
 import type {
   Deck,
@@ -29,7 +29,7 @@ const startupFolder = process.env.HTML_VIEWER_OPEN_FOLDER;
 const autoQuitMs = Number(process.env.HTML_VIEWER_AUTO_QUIT_MS ?? 0);
 
 let mainWindow: BrowserWindow | null = null;
-let browserView: BrowserView | null = null;
+let documentView: WebContentsView | null = null;
 let currentDeck: Deck | null = null;
 let localServer: LocalServerHandle | null = null;
 let searchCatalog: SearchCatalog | null = null;
@@ -74,7 +74,7 @@ function showOpenFolderError(error: unknown): void {
 
 function setBrowserZoomFactor(factor: number): void {
   zoomFactor = Math.min(2, Math.max(0.5, Number(factor.toFixed(2))));
-  browserView?.webContents.setZoomFactor(zoomFactor);
+  documentView?.webContents.setZoomFactor(zoomFactor);
   sendToRenderer("viewer:zoom-changed", zoomFactor);
 }
 
@@ -157,8 +157,24 @@ function sendToRenderer(channel: string, payload: unknown): void {
   mainWindow.webContents.send(channel, payload);
 }
 
-function createBrowserView(): BrowserView {
-  const view = new BrowserView({
+function focusSearchInRenderer(): void {
+  sendToRenderer("viewer:focus-search", null);
+}
+
+function registerFocusSearchShortcut(contents: Electron.WebContents): void {
+  contents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") {
+      return;
+    }
+    if ((input.control || input.meta) && input.key.toLowerCase() === "f") {
+      event.preventDefault();
+      focusSearchInRenderer();
+    }
+  });
+}
+
+function createDocumentView(): WebContentsView {
+  const view = new WebContentsView({
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -197,6 +213,8 @@ function createBrowserView(): BrowserView {
     sendToRenderer("viewer:find-result", payload);
   });
 
+  registerFocusSearchShortcut(view.webContents);
+
   return view;
 }
 
@@ -227,9 +245,9 @@ async function createMainWindow(): Promise<void> {
     }
   });
 
-  browserView = createBrowserView();
-  browserView.setBounds({ x: 0, y: 0, width: 0, height: 0 });
-  mainWindow.setBrowserView(browserView);
+  documentView = createDocumentView();
+  documentView.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+  mainWindow.contentView.addChildView(documentView);
 
   const rendererUrl =
     process.env.VITE_DEV_SERVER_URL ??
@@ -237,6 +255,7 @@ async function createMainWindow(): Promise<void> {
 
   await mainWindow.loadURL(rendererUrl);
   lockRendererZoom(mainWindow);
+  registerFocusSearchShortcut(mainWindow.webContents);
 }
 
 async function stopLocalServer(): Promise<void> {
@@ -253,7 +272,7 @@ function firstNavigablePage(deck: Deck): string | null {
 }
 
 async function loadHref(href: string): Promise<void> {
-  if (!browserView || !localServer || !currentDeck) {
+  if (!documentView || !localServer || !currentDeck) {
     return;
   }
 
@@ -272,7 +291,7 @@ async function loadHref(href: string): Promise<void> {
     return;
   }
 
-  await browserView.webContents.loadURL(localServer.toUrl(`${page.path}${parsed.hash}`));
+  await documentView.webContents.loadURL(localServer.toUrl(`${page.path}${parsed.hash}`));
 }
 
 async function openFolderDialog(): Promise<Deck | null> {
@@ -315,17 +334,16 @@ async function openFolderPath(folderPath: string): Promise<Deck> {
 }
 
 function setViewBounds(bounds: ViewBounds): void {
-  if (!browserView) {
+  if (!documentView) {
     return;
   }
 
-  browserView.setBounds({
+  documentView.setBounds({
     x: Math.max(0, Math.round(bounds.x)),
     y: Math.max(0, Math.round(bounds.y)),
     width: Math.max(0, Math.round(bounds.width)),
     height: Math.max(0, Math.round(bounds.height))
   });
-  browserView.setAutoResize({ width: false, height: false });
 }
 
 ipcMain.handle("folder:open", () => openFolderDialog());
@@ -349,17 +367,17 @@ ipcMain.handle("search:query", (_event, query: string, matchCase: boolean) => {
   );
 });
 ipcMain.handle("viewer:find-in-page", (_event, request: FindRequest) => {
-  if (!browserView || !request.query) {
+  if (!documentView || !request.query) {
     return;
   }
-  browserView.webContents.findInPage(request.query, {
+  documentView.webContents.findInPage(request.query, {
     forward: request.forward,
     findNext: request.findNext,
     matchCase: request.matchCase
   });
 });
 ipcMain.handle("viewer:stop-find-in-page", () => {
-  browserView?.webContents.stopFindInPage("clearSelection");
+  documentView?.webContents.stopFindInPage("clearSelection");
 });
 
 app
