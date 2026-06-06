@@ -486,7 +486,7 @@ export default function App() {
         {!focusMode ? (
           <header
             data-testid="toolbar"
-            className="flex h-16 shrink-0 items-center gap-2 border-b bg-background px-3"
+            className="flex h-14 shrink-0 items-center gap-2 border-b bg-background px-3"
           >
             <div className="flex items-center gap-1.5">
               <Button size="sm" onClick={openFolder}>
@@ -762,7 +762,7 @@ export default function App() {
           </div>
         ) : null}
 
-        <main className={cn("flex min-h-0 flex-1 gap-3", focusMode ? "p-0" : "p-3")}>
+        <main className={cn("flex min-h-0 flex-1 gap-3", focusMode ? "p-0" : "p-3 pt-4")}>
           {showSidebar ? (
             <aside className="flex w-72 shrink-0 flex-col overflow-hidden border bg-card">
               <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
