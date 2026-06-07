@@ -352,6 +352,40 @@ test.describe("HTML Viewer", () => {
     }
   });
 
+  test("arrow keys navigate pages when no element is focused", async () => {
+    const { electronApp, window, userDataDir } = await launchApp();
+
+    try {
+      await waitForDocumentViewUrl(electronApp, /intro\.html/i);
+
+      await window.evaluate(() => {
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
+      });
+      await expect
+        .poll(async () => isDocumentViewFocused(electronApp))
+        .toBe(false);
+
+      await window.keyboard.press("ArrowDown");
+      await waitForDocumentViewUrl(electronApp, /setup\.html(?!#)/i);
+      await expectUiIntact(window, electronApp);
+
+      await window.evaluate(() => {
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
+      });
+
+      await window.keyboard.press("ArrowUp");
+      await waitForDocumentViewUrl(electronApp, /intro\.html/i);
+      await expectUiIntact(window, electronApp);
+    } finally {
+      await electronApp.close();
+      await rm(userDataDir, { recursive: true, force: true });
+    }
+  });
+
   test("toolbar navigation and sidebar toggle keep the viewer visible", async () => {
     const { electronApp, window, userDataDir } = await launchApp();
 
