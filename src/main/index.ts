@@ -204,6 +204,18 @@ function buildAppMenu(): void {
       ]
     },
     {
+      label: "編集",
+      submenu: [
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        { role: "selectAll" }
+      ]
+    },
+    {
       label: "設定",
       submenu: [
         {
