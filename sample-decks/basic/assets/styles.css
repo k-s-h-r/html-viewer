@@ -78,7 +78,6 @@ a:hover {
 
 .doc-lead {
   margin: 16px 0 0;
-  max-width: 62ch;
   color: var(--doc-muted);
   font-size: 18px;
 }
