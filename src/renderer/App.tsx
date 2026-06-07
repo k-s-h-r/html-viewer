@@ -8,6 +8,11 @@ import type {
   SearchResult
 } from "../shared/types";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup
+} from "@/components/ui/resizable";
 import { cn } from "@/lib/utils";
 import { formatGlobalFindCounter } from "./searchCounter";
 import {
@@ -23,6 +28,7 @@ import { TocSidebar } from "./components/TocSidebar";
 import { ViewerSection } from "./components/ViewerSection";
 import { ResultsPane } from "./components/ResultsPane";
 import { StatusBanners } from "./components/StatusBanners";
+import { readSidebarLayout, resetSidebarLayout, saveSidebarLayout, toPanelLayout } from "./sidebarLayout";
 
 const EMPTY_SEARCH: SearchResult = {
   query: "",
@@ -47,6 +53,7 @@ export default function App() {
   const [findResult, setFindResult] = useState<FindResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedPages, setExpandedPages] = useState<Set<string>>(new Set());
+  const [sidebarLayoutVersion, setSidebarLayoutVersion] = useState(0);
   const viewerHostRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const findSequenceRef = useRef(0);
@@ -329,6 +336,10 @@ export default function App() {
     const cleanupFind = window.viewerApi.onFindResult(setFindResult);
     const cleanupZoom = window.viewerApi.onZoomChanged(setZoom);
     const cleanupFocusSearch = window.viewerApi.onFocusSearch(focusSearchInput);
+    const cleanupSidebarLayoutReset = window.viewerApi.onSidebarLayoutReset(() => {
+      resetSidebarLayout();
+      setSidebarLayoutVersion((version) => version + 1);
+    });
 
     return () => {
       cleanupDeck();
@@ -336,6 +347,7 @@ export default function App() {
       cleanupFind();
       cleanupZoom();
       cleanupFocusSearch();
+      cleanupSidebarLayoutReset();
     };
   }, [applyDeck, focusSearchInput, updateRecentFolders]);
 
@@ -449,6 +461,16 @@ export default function App() {
   const showSidebar = sidebarVisible && !focusMode;
   const showResults = Boolean(submittedQuery.trim()) && searchQuery.trim() === submittedQuery;
   const showResultsPane = showResults && resultsPaneVisible && !focusMode;
+  const sidebarDefaultLayout = useMemo(
+    () => (showSidebar ? toPanelLayout(readSidebarLayout()) : null),
+    [showSidebar, sidebarLayoutVersion]
+  );
+  const handleSidebarLayoutChanged = useCallback((layout: Record<string, number>) => {
+    if (typeof layout.sidebar !== "number") {
+      return;
+    }
+    saveSidebarLayout({ sidebar: layout.sidebar });
+  }, []);
   const findCounter = useMemo(
     () => formatGlobalFindCounter(submittedQuery, searchResult, selectedPath, findResult),
     [findResult, searchResult, selectedPath, submittedQuery]
@@ -495,28 +517,56 @@ export default function App() {
         <StatusBanners error={error} warning={deck?.warning} />
 
         <main className={cn("flex min-h-0 flex-1 gap-3", focusMode ? "p-0" : "p-3 pt-4")}>
-          {showSidebar ? (
-            <TocSidebar
-              deck={deck}
-              selectedPath={selectedPath}
-              selectedHash={selectedHash}
-              expandedPages={expandedPages}
-              onToggleExpanded={toggleExpanded}
-              onNavigateTo={(page, href, openExternal) =>
-                navigateTo(page, href ?? page.href, openExternal, refindForward)
-              }
-              onNavigateByOffset={navigateByOffset}
-              onClose={() => setSidebarVisible(false)}
-            />
-          ) : null}
-
-          <ViewerSection
-            deck={deck}
-            focusMode={focusMode}
-            viewerHostRef={viewerHostRef}
-            onOpenFolder={() => void openFolder()}
-            onFocusModeDisable={() => setFocusMode(false)}
-          />
+          {showSidebar && sidebarDefaultLayout ? (
+            <ResizablePanelGroup
+              key={`sidebar-layout-${sidebarLayoutVersion}`}
+              data-testid="main-panel-group"
+              orientation="horizontal"
+              className="min-h-0 min-w-0 flex-1"
+              defaultLayout={sidebarDefaultLayout}
+              onLayoutChanged={handleSidebarLayoutChanged}
+            >
+              <ResizablePanel
+                id="sidebar"
+                minSize="15%"
+                maxSize="45%"
+                className="min-w-0"
+              >
+                <TocSidebar
+                  deck={deck}
+                  selectedPath={selectedPath}
+                  selectedHash={selectedHash}
+                  expandedPages={expandedPages}
+                  onToggleExpanded={toggleExpanded}
+                  onNavigateTo={(page, href, openExternal) =>
+                    navigateTo(page, href ?? page.href, openExternal, refindForward)
+                  }
+                  onNavigateByOffset={navigateByOffset}
+                  onClose={() => setSidebarVisible(false)}
+                />
+              </ResizablePanel>
+              <ResizableHandle withHandle />
+              <ResizablePanel id="viewer" minSize="40%" className="min-w-0">
+                <ViewerSection
+                  deck={deck}
+                  focusMode={focusMode}
+                  viewerHostRef={viewerHostRef}
+                  onOpenFolder={() => void openFolder()}
+                  onFocusModeDisable={() => setFocusMode(false)}
+                />
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          ) : (
+            <div className="min-h-0 min-w-0 flex-1">
+              <ViewerSection
+                deck={deck}
+                focusMode={focusMode}
+                viewerHostRef={viewerHostRef}
+                onOpenFolder={() => void openFolder()}
+                onFocusModeDisable={() => setFocusMode(false)}
+              />
+            </div>
+          )}
 
           {showResultsPane ? (
             <ResultsPane

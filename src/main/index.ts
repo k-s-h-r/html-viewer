@@ -121,6 +121,17 @@ function buildAppMenu(): void {
       ]
     },
     {
+      label: "設定",
+      submenu: [
+        {
+          label: "サイドバー幅を既定値に戻す",
+          click: () => {
+            sendToRenderer("settings:reset-sidebar-layout", null);
+          }
+        }
+      ]
+    },
+    {
       label: "表示",
       submenu: [
         {

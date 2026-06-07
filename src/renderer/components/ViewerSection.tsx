@@ -27,7 +27,7 @@ export function ViewerSection({
   return (
     <section
       className={cn(
-        "relative min-h-0 min-w-0 flex-1 overflow-hidden border bg-card",
+        "relative h-full min-h-0 min-w-0 overflow-hidden border bg-card",
         focusMode && "border-0"
       )}
     >
