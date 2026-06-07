@@ -410,10 +410,10 @@ export default function App() {
         return;
       }
 
-      if (event.key === "ArrowRight") {
+      if (event.key === "ArrowRight" || event.key === "ArrowDown") {
         navigateByOffset(1);
       }
-      if (event.key === "ArrowLeft") {
+      if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
         navigateByOffset(-1);
       }
     };

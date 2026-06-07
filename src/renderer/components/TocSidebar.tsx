@@ -254,6 +254,7 @@ export function TocSidebar({
       return;
     }
     event.preventDefault();
+    event.stopPropagation();
     pendingSelectionRefocusRef.current = true;
     onNavigateByOffset(event.key === "ArrowDown" ? 1 : -1);
   };
