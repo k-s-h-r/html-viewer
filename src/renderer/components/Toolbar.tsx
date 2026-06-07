@@ -11,7 +11,9 @@ import {
   Minus,
   PanelLeft,
   PanelRight,
+  Copy,
   PencilLine,
+  Trash2,
   Plus,
   Search,
   X
@@ -48,9 +50,13 @@ type ToolbarProps = {
   zoom: number;
   sidebarVisible: boolean;
   resultsPaneVisible: boolean;
+  editMode: boolean;
+  onEditModeToggle: () => void;
   onOpenFolder: () => void;
   onOpenRecentFolder: (folderPath: string) => void;
   onOpenEditor: () => void;
+  onDuplicatePage: () => void;
+  onDeletePage: () => void;
   onSearchQueryChange: (value: string) => void;
   onClearSearch: () => void;
   onMatchCaseToggle: () => void;
@@ -76,9 +82,13 @@ export function Toolbar({
   zoom,
   sidebarVisible,
   resultsPaneVisible,
+  editMode,
+  onEditModeToggle,
   onOpenFolder,
   onOpenRecentFolder,
   onOpenEditor,
+  onDuplicatePage,
+  onDeletePage,
   onSearchQueryChange,
   onClearSearch,
   onMatchCaseToggle,
@@ -132,15 +142,63 @@ export function Toolbar({
 
       <Separator orientation="vertical" className="mx-1 h-6 my-auto" />
 
-      <Button
-        size="sm"
-        disabled={!deck}
-        aria-label="現在ページを編集"
-        onClick={onOpenEditor}
-      >
-        <PencilLine />
-        編集
-      </Button>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant={editMode ? "secondary" : "ghost"}
+              size="sm"
+              disabled={!deck}
+              aria-pressed={editMode}
+              aria-label="編集モード"
+              data-testid="edit-mode-toggle"
+              onClick={onEditModeToggle}
+            >
+              <PencilLine />
+              {editMode ? "編集モードを終了" : "編集モード"}
+            </Button>
+          }
+        />
+        <TooltipContent side="bottom">
+          {editMode ? "編集モードを終了" : "編集モードを開始"}
+        </TooltipContent>
+      </Tooltip>
+      {editMode ? (
+        <>
+          <Button
+            size="sm"
+            disabled={!deck}
+            aria-label="現在ページを編集"
+            data-testid="open-editor-button"
+            onClick={onOpenEditor}
+          >
+            <PencilLine />
+            編集
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!deck || selectedPageNumber === 0}
+            aria-label="現在ページを複製"
+            data-testid="duplicate-page-button"
+            onClick={onDuplicatePage}
+          >
+            <Copy />
+            複製
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!deck || selectedPageNumber === 0}
+            aria-label="現在ページを削除"
+            data-testid="delete-page-button"
+            onClick={onDeletePage}
+          >
+            <Trash2 />
+            削除
+          </Button>
+        </>
+      ) : null}
 
       <Separator orientation="vertical" className="mx-1 h-6 my-auto" />
 

@@ -66,6 +66,7 @@ function collectCollapsibleOutlineKeys(
 
 export function App() {
   const canvasRef = useRef<CanvasHandle>(null)
+  const allowCloseRef = useRef(false)
   const [canvasHandle, setCanvasHandle] = useState<CanvasHandle | null>(null)
   const [mode, setMode] = useState<EditorMode>("edit")
   const [selection, setSelection] = useState<SelectionInfo | null>(null)
@@ -229,6 +230,19 @@ export function App() {
   const handleCollapseAllOutline = useCallback(() => {
     setCollapsedOutlinePaths(collectCollapsibleOutlineKeys(outline))
   }, [outline])
+
+  const handleExit = useCallback(() => {
+    if ((dirty || sourceDirty) && !confirm("未保存の変更があります。終了しますか?")) {
+      return
+    }
+    allowCloseRef.current = true
+    const api = getHostApi()
+    if (api) {
+      void api.close()
+      return
+    }
+    window.close()
+  }, [dirty, sourceDirty])
 
   const handleNew = useCallback(() => {
     if (dirty && !confirm("未保存の変更があります。新規作成しますか?")) return
@@ -525,9 +539,10 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey)
   }, [handleSave, handleUndo, handleRedo, mode])
 
-  // 未保存時の離脱警告
+  // 未保存時の離脱警告（終了ボタンで確認済みの場合はスキップ）
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (allowCloseRef.current) return
       if (!dirty && !sourceDirty) return
       e.preventDefault()
       e.returnValue = ""
@@ -556,6 +571,7 @@ export function App() {
         onUndo={handleUndo}
         onRedo={handleRedo}
         onModeChange={handleModeChange}
+        onExit={handleExit}
       />
 
       <div className="flex min-h-0 flex-1">

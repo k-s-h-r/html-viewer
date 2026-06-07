@@ -1,3 +1,11 @@
+import type {
+  AddPageOptions,
+  DeletePageOptions,
+  DuplicatePageOptions,
+  TocEntry,
+  TocSnapshot
+} from "./deckToc.js";
+
 export type LinkKind = "page" | "missing" | "out-of-scope" | "external";
 
 export interface DeckAnchor {
@@ -97,6 +105,15 @@ export interface EditorDocument {
   baseHref: string;
 }
 
+export type {
+  AddPageOptions,
+  DeletePageOptions,
+  DuplicatePageOptions,
+  TocEntry,
+  TocSnapshot,
+  TocSource
+} from "./deckToc.js";
+
 export interface ViewerApi {
   openFolder(): Promise<Deck | null>;
   openRecentFolder(path: string): Promise<Deck | null>;
@@ -110,6 +127,13 @@ export interface ViewerApi {
   findInPage(request: FindRequest): Promise<void>;
   stopFindInPage(): Promise<void>;
   openEditor(pagePath: string): Promise<void>;
+  getToc(): Promise<TocSnapshot>;
+  getMenuJsonText(): Promise<string>;
+  saveMenuJsonText(text: string): Promise<Deck>;
+  updateToc(entries: TocEntry[]): Promise<Deck>;
+  addPage(options: AddPageOptions): Promise<{ path: string }>;
+  duplicatePage(options: DuplicatePageOptions): Promise<{ path: string }>;
+  deletePage(options: DeletePageOptions): Promise<void>;
   focusSearch(clickPoint?: InputPoint): Promise<void>;
   focusDocument(): Promise<void>;
   focusSidebar(): Promise<void>;
@@ -126,4 +150,5 @@ export interface ViewerApi {
 export interface EditorApi {
   getInitialDocument(): Promise<EditorDocument | null>;
   savePage(html: string): Promise<void>;
+  close(): Promise<void>;
 }

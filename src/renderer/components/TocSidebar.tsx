@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import { ChevronDown, PanelLeftClose } from "lucide-react";
+import { ChevronDown, FilePlus2, ListTree, PanelLeftClose } from "lucide-react";
 import type { Deck, DeckPage } from "../../shared/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,12 +21,15 @@ import {
 
 type TocSidebarProps = {
   deck: Deck | null;
+  editMode: boolean;
   selectedPath: string | null;
   selectedHash: string | null;
   expandedPages: Set<string>;
   onToggleExpanded: (pageId: string) => void;
   onNavigateTo: (page: DeckPage, href?: string, openExternal?: boolean) => Promise<void>;
   onNavigateByOffset: (offset: number) => void;
+  onAddPage: () => void;
+  onEditToc: () => void;
   onClose: () => void;
 };
 
@@ -164,12 +167,15 @@ function PageRow({
 
 export function TocSidebar({
   deck,
+  editMode,
   selectedPath,
   selectedHash,
   expandedPages,
   onToggleExpanded,
   onNavigateTo,
   onNavigateByOffset,
+  onAddPage,
+  onEditToc,
   onClose
 }: TocSidebarProps) {
   const selectedPageButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -275,6 +281,42 @@ export function TocSidebar({
               {deck.hasToc ? "目次" : "フォールバック"}
             </Badge>
           ) : null}
+          {deck && editMode ? (
+            <>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label="ページを追加"
+                      data-testid="add-page-button"
+                      onClick={onAddPage}
+                    >
+                      <FilePlus2 />
+                    </Button>
+                  }
+                />
+                <TooltipContent align="center">ページを追加</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label="目次を編集"
+                      data-testid="edit-toc-button"
+                      onClick={onEditToc}
+                    >
+                      <ListTree />
+                    </Button>
+                  }
+                />
+                <TooltipContent align="center">目次を編集</TooltipContent>
+              </Tooltip>
+            </>
+          ) : null}
           <Tooltip>
             <TooltipTrigger
               render={
@@ -288,7 +330,7 @@ export function TocSidebar({
                 </Button>
               }
             />
-            <TooltipContent side="right">目次を閉じる</TooltipContent>
+            <TooltipContent align="center">目次を閉じる</TooltipContent>
           </Tooltip>
         </div>
       </div>
