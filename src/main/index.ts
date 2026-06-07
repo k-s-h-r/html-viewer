@@ -11,16 +11,22 @@ import {
   WebContentsView
 } from "electron";
 import type {
+  AddPageOptions,
   Deck,
   DeckPage,
+  DeletePageOptions,
+  DuplicatePageOptions,
   EditorDocument,
   FindRequest,
   FindResult,
   InputPoint,
   NavigationState,
   RecentFolder,
+  TocEntry,
   ViewBounds
 } from "../shared/types.js";
+import { addPage, deletePage, duplicatePage } from "./deckPages.js";
+import { readMenuJsonText, readTocEntries, writeMenuJsonText, writeTocEntries } from "./deckToc.js";
 import { buildDeck, findDeckPageByHref, flattenDeckPages, localPathFromPage, splitHref } from "./deck.js";
 import { startLocalServer, type LocalServerHandle } from "./localServer.js";
 import { SearchCatalog } from "./search.js";
@@ -469,9 +475,24 @@ function editorRendererUrl(): string {
   return `file://${path.join(__dirname, "../../dist/editor.html")}`;
 }
 
-async function editorDocumentForPage(pagePath: string): Promise<EditorDocument> {
+async function resolveEditorTarget(
+  pagePath: string
+): Promise<{ filePath: string; resolvedPagePath: string; name: string }> {
   if (!currentDeck || !localServer) {
     throw new Error("編集する仕様書フォルダが開かれていません。");
+  }
+
+  const normalizedPath = pagePath.split(path.sep).join("/");
+  if (normalizedPath.toLowerCase() === "index.html") {
+    const filePath = path.join(currentDeck.rootDir, "index.html");
+    if (!isInsideDeckRoot(filePath)) {
+      throw new Error("編集対象のHTMLページが仕様書フォルダ外です。");
+    }
+    return {
+      filePath,
+      resolvedPagePath: "index.html",
+      name: "index.html"
+    };
   }
 
   const page = findDeckPageByPath(pagePath);
@@ -485,10 +506,28 @@ async function editorDocumentForPage(pagePath: string): Promise<EditorDocument> 
   }
 
   return {
-    html: await readFile(filePath, "utf8"),
-    name: path.basename(page.path),
-    pagePath: page.path,
-    baseHref: new URL("./", localServer.toUrl(page.path)).toString()
+    filePath,
+    resolvedPagePath: page.path,
+    name: path.basename(page.path)
+  };
+}
+
+function isInsideDeckRoot(targetPath: string): boolean {
+  if (!currentDeck) {
+    return false;
+  }
+  const relative = path.relative(currentDeck.rootDir, targetPath);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+async function editorDocumentForPage(pagePath: string): Promise<EditorDocument> {
+  const target = await resolveEditorTarget(pagePath);
+
+  return {
+    html: await readFile(target.filePath, "utf8"),
+    name: target.name,
+    pagePath: target.resolvedPagePath,
+    baseHref: new URL("./", localServer!.toUrl(target.resolvedPagePath)).toString()
   };
 }
 
@@ -554,17 +593,20 @@ async function saveEditorPage(webContentsId: number, html: string): Promise<void
     throw new Error("編集セッションが見つかりません。");
   }
 
+  const target = await resolveEditorTarget(session.pagePath);
+
+  await writeFile(target.filePath, html, "utf8");
+
+  if (target.resolvedPagePath.toLowerCase() === "index.html") {
+    await refreshCurrentDeck();
+    return;
+  }
+
   const page = findDeckPageByPath(session.pagePath);
   if (!page) {
     throw new Error("保存先のHTMLページが見つかりません。");
   }
 
-  const filePath = localPathFromPage(currentDeck.rootDir, page);
-  if (!filePath) {
-    throw new Error("保存先のHTMLページが仕様書フォルダ外です。");
-  }
-
-  await writeFile(filePath, html, "utf8");
   searchCatalog = await SearchCatalog.create(currentDeck.rootDir, currentDeck);
   await refreshDocumentViewIfShowingPage(page.path);
 }
@@ -584,6 +626,22 @@ async function openFolderDialog(): Promise<Deck | null> {
   }
 
   return openFolderPath(result.filePaths[0]);
+}
+
+function requireCurrentDeckRoot(): string {
+  if (!currentDeck) {
+    throw new Error("仕様書フォルダが開かれていません。");
+  }
+  return currentDeck.rootDir;
+}
+
+async function refreshCurrentDeck(): Promise<Deck> {
+  const rootDir = requireCurrentDeckRoot();
+  const deck = await buildDeck(rootDir);
+  searchCatalog = await SearchCatalog.create(rootDir, deck);
+  currentDeck = deck;
+  sendToRenderer("deck:changed", deck);
+  return deck;
 }
 
 async function openFolderPath(folderPath: string): Promise<Deck> {
@@ -625,6 +683,37 @@ ipcMain.handle("folder:open", () => openFolderDialog());
 ipcMain.handle("folder:open-recent", (_event, folderPath: string) => openFolderPath(folderPath));
 ipcMain.handle("folder:get-recent", () => recentFolders);
 ipcMain.handle("deck:get-current", () => currentDeck);
+ipcMain.handle("deck:get-toc", () => readTocEntries(requireCurrentDeckRoot()));
+ipcMain.handle("deck:get-menu-json-text", () => readMenuJsonText(requireCurrentDeckRoot()));
+ipcMain.handle("deck:save-menu-json-text", async (_event, text: string) => {
+  const rootDir = requireCurrentDeckRoot();
+  await writeMenuJsonText(rootDir, text);
+  return refreshCurrentDeck();
+});
+ipcMain.handle("deck:update-toc", async (_event, entries: TocEntry[]) => {
+  const rootDir = requireCurrentDeckRoot();
+  const snapshot = await readTocEntries(rootDir);
+  await writeTocEntries(rootDir, snapshot.source, entries);
+  return refreshCurrentDeck();
+});
+ipcMain.handle("deck:add-page", async (_event, options: AddPageOptions) => {
+  const rootDir = requireCurrentDeckRoot();
+  const result = await addPage(rootDir, options);
+  await refreshCurrentDeck();
+  return result;
+});
+ipcMain.handle("deck:duplicate-page", async (_event, options: DuplicatePageOptions) => {
+  const rootDir = requireCurrentDeckRoot();
+  const result = await duplicatePage(rootDir, options);
+  await refreshCurrentDeck();
+  return result;
+});
+ipcMain.handle("deck:delete-page", async (_event, options: DeletePageOptions) => {
+  const rootDir = requireCurrentDeckRoot();
+  const result = await deletePage(rootDir, options);
+  await refreshCurrentDeck();
+  return result;
+});
 ipcMain.handle("viewer:navigate", (_event, href: string) => loadHref(href));
 ipcMain.handle("viewer:open-external", (_event, href: string) => shell.openExternal(href));
 ipcMain.handle("viewer:set-bounds", (_event, bounds: ViewBounds) => setViewBounds(bounds));
@@ -686,6 +775,10 @@ ipcMain.handle("editor:get-initial-document", (event) => {
 ipcMain.handle("editor:save-page", (event, html: string) =>
   saveEditorPage(event.sender.id, html)
 );
+ipcMain.handle("editor:close", (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  window?.close();
+});
 
 app
   .whenReady()

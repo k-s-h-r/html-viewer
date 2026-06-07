@@ -23,8 +23,12 @@ import {
   pageMatchesSelection,
   visibleNavigablePages
 } from "./pageUtils";
+import { Toaster } from "@/components/ui/sonner";
+import { toast } from "sonner";
 import { Toolbar } from "./components/Toolbar";
 import { TocSidebar } from "./components/TocSidebar";
+import { AddPageDialog } from "./components/AddPageDialog";
+import { MenuJsonEditorDialog } from "./components/MenuJsonEditorDialog";
 import { ViewerSection } from "./components/ViewerSection";
 import { ResultsPane } from "./components/ResultsPane";
 import { StatusBanners } from "./components/StatusBanners";
@@ -45,6 +49,7 @@ export default function App() {
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [resultsPaneVisible, setResultsPaneVisible] = useState(true);
   const [focusMode, setFocusMode] = useState(false);
+  const [editMode, setEditMode] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
@@ -54,6 +59,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [expandedPages, setExpandedPages] = useState<Set<string>>(new Set());
   const [sidebarLayoutVersion, setSidebarLayoutVersion] = useState(0);
+  const [addPageDialogOpen, setAddPageDialogOpen] = useState(false);
+  const [menuJsonEditorOpen, setMenuJsonEditorOpen] = useState(false);
   const viewerHostRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const findSequenceRef = useRef(0);
@@ -72,11 +79,29 @@ export default function App() {
 
   const applyDeck = useCallback((nextDeck: Deck | null) => {
     setDeck(nextDeck);
+    if (!nextDeck) {
+      setEditMode(false);
+      setAddPageDialogOpen(false);
+      setMenuJsonEditorOpen(false);
+    }
     setSearchResult(EMPTY_SEARCH);
     setFindResult(null);
     setSearchQuery("");
     setSubmittedQuery("");
-    setSelectedPath(firstNavigablePagePath(nextDeck));
+    setSelectedPath((currentPath) => {
+      if (!nextDeck) {
+        return null;
+      }
+      if (currentPath) {
+        const stillExists = flattenDeckPages(nextDeck.pages).some(
+          (page) => page.kind === "page" && page.path === currentPath
+        );
+        if (stillExists) {
+          return currentPath;
+        }
+      }
+      return firstNavigablePagePath(nextDeck);
+    });
     setSelectedHash(null);
     setExpandedPages(new Set());
   }, []);
@@ -160,7 +185,7 @@ export default function App() {
   );
 
   const reportViewBounds = useCallback(() => {
-    if (!deck) {
+    if (!deck || addPageDialogOpen || menuJsonEditorOpen) {
       void window.viewerApi.setViewBounds({ x: 0, y: 0, width: 0, height: 0 });
       return;
     }
@@ -176,7 +201,7 @@ export default function App() {
       width: rect.width,
       height: rect.height
     });
-  }, [deck]);
+  }, [addPageDialogOpen, deck, menuJsonEditorOpen]);
 
   const navigateTo = useCallback(
     async (
@@ -378,7 +403,15 @@ export default function App() {
       observer.disconnect();
       window.removeEventListener("resize", reportViewBounds);
     };
-  }, [reportViewBounds, sidebarVisible, resultsPaneVisible, focusMode, submittedQuery]);
+  }, [
+    addPageDialogOpen,
+    reportViewBounds,
+    sidebarVisible,
+    resultsPaneVisible,
+    focusMode,
+    submittedQuery,
+    menuJsonEditorOpen
+  ]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -458,6 +491,148 @@ export default function App() {
     }
   };
 
+  const handleAddPage = async (values: { title: string; relativePath: string }) => {
+    try {
+      setError(null);
+      const insertAfter = selectedPath
+        ? navigablePages.find((page) => page.path === selectedPath)?.href ?? selectedPath
+        : undefined;
+      const result = await window.viewerApi.addPage({
+        title: values.title,
+        relativePath: values.relativePath,
+        insertAfter
+      });
+      await window.viewerApi.navigate(result.path);
+      toast.success(`「${values.title}」を追加しました`);
+    } catch (addError) {
+      const message = addError instanceof Error ? addError.message : String(addError);
+      setError(message);
+      toast.error(message);
+      throw addError;
+    }
+  };
+
+  const handleDuplicatePage = async () => {
+    if (!selectedPath || !deck) {
+      return;
+    }
+    const sourcePage = flattenDeckPages(deck.pages).find(
+      (page) => page.kind === "page" && page.path === selectedPath
+    );
+    if (!sourcePage) {
+      return;
+    }
+
+    try {
+      setError(null);
+      const result = await window.viewerApi.duplicatePage({
+        sourcePath: selectedPath,
+        insertAfter: sourcePage.href
+      });
+      await window.viewerApi.navigate(result.path);
+      toast.success("ページを複製しました");
+    } catch (duplicateError) {
+      const message =
+        duplicateError instanceof Error ? duplicateError.message : String(duplicateError);
+      setError(message);
+      toast.error(message);
+    }
+  };
+
+  const handleDeletePage = async () => {
+    if (!selectedPath || !deck) {
+      return;
+    }
+    const targetPage = flattenDeckPages(deck.pages).find(
+      (page) => page.kind === "page" && page.path === selectedPath
+    );
+    if (!targetPage) {
+      return;
+    }
+
+    const confirmed = confirm(
+      `「${targetPage.title}」を削除しますか？\nHTML ファイルと目次から削除されます。この操作は取り消せません。`
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    const currentIndex = navigablePages.findIndex(
+      (page) => page.kind === "page" && page.path === selectedPath
+    );
+    const fallbackPage =
+      currentIndex >= 0
+        ? (navigablePages[currentIndex + 1] ?? navigablePages[currentIndex - 1])
+        : undefined;
+
+    try {
+      setError(null);
+      await window.viewerApi.deletePage({ targetPath: selectedPath });
+      if (fallbackPage && fallbackPage.kind === "page" && fallbackPage.path !== selectedPath) {
+        await window.viewerApi.navigate(fallbackPage.href);
+      } else {
+        const nextDeck = await window.viewerApi.getCurrentDeck();
+        const fallbackPath = firstNavigablePagePath(nextDeck);
+        if (fallbackPath) {
+          await window.viewerApi.navigate(fallbackPath);
+        }
+      }
+      toast.success(`「${targetPage.title}」を削除しました`);
+    } catch (deleteError) {
+      const message = deleteError instanceof Error ? deleteError.message : String(deleteError);
+      setError(message);
+      toast.error(message);
+    }
+  };
+
+  const handleEditToc = async () => {
+    try {
+      setError(null);
+      const snapshot = await window.viewerApi.getToc();
+      if (snapshot.source.kind === "index-html") {
+        await window.viewerApi.openEditor("index.html");
+        return;
+      }
+      setMenuJsonEditorOpen(true);
+    } catch (editTocError) {
+      const message = editTocError instanceof Error ? editTocError.message : String(editTocError);
+      setError(message);
+      toast.error(message);
+    }
+  };
+
+  const handleSaveMenuJson = async (text: string) => {
+    try {
+      setError(null);
+      const nextDeck = await window.viewerApi.saveMenuJsonText(text);
+      const currentStillExists =
+        selectedPath &&
+        flattenDeckPages(nextDeck.pages).some(
+          (page) => page.kind === "page" && page.path === selectedPath
+        );
+      if (!currentStillExists) {
+        const fallbackPath = firstNavigablePagePath(nextDeck);
+        if (fallbackPath) {
+          await window.viewerApi.navigate(fallbackPath);
+        }
+      }
+      toast.success("menu.json を保存しました");
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : String(saveError);
+      setError(message);
+      toast.error(message);
+      throw saveError;
+    }
+  };
+
+  const setEditModeEnabled = useCallback((enabled: boolean) => {
+    setEditMode(enabled);
+    if (!enabled) {
+      setAddPageDialogOpen(false);
+      setMenuJsonEditorOpen(false);
+    }
+  }, []);
+
   const toggleExpanded = (pageId: string) => {
     setExpandedPages((current) => {
       const next = new Set(current);
@@ -511,9 +686,13 @@ export default function App() {
             zoom={zoom}
             sidebarVisible={sidebarVisible}
             resultsPaneVisible={resultsPaneVisible}
+            editMode={editMode}
+            onEditModeToggle={() => setEditModeEnabled(!editMode)}
             onOpenFolder={() => void openFolder()}
             onOpenRecentFolder={(folderPath) => void openRecentFolder(folderPath)}
             onOpenEditor={() => void openEditor()}
+            onDuplicatePage={() => void handleDuplicatePage()}
+            onDeletePage={() => void handleDeletePage()}
             onSearchQueryChange={setSearchQuery}
             onClearSearch={() => void clearSearch()}
             onMatchCaseToggle={() => setMatchCase((value) => !value)}
@@ -547,6 +726,7 @@ export default function App() {
               >
                 <TocSidebar
                   deck={deck}
+                  editMode={editMode}
                   selectedPath={selectedPath}
                   selectedHash={selectedHash}
                   expandedPages={expandedPages}
@@ -555,6 +735,8 @@ export default function App() {
                     navigateTo(page, href ?? page.href, openExternal, refindForward)
                   }
                   onNavigateByOffset={navigateByOffset}
+                  onAddPage={() => setAddPageDialogOpen(true)}
+                  onEditToc={() => void handleEditToc()}
                   onClose={() => setSidebarVisible(false)}
                 />
               </ResizablePanel>
@@ -593,6 +775,19 @@ export default function App() {
             />
           ) : null}
         </main>
+
+        <AddPageDialog
+          open={addPageDialogOpen}
+          onOpenChange={setAddPageDialogOpen}
+          onSubmit={handleAddPage}
+        />
+        <MenuJsonEditorDialog
+          open={menuJsonEditorOpen}
+          onOpenChange={setMenuJsonEditorOpen}
+          onLoad={() => window.viewerApi.getMenuJsonText()}
+          onSave={handleSaveMenuJson}
+        />
+        <Toaster position="bottom-right" />
       </div>
     </TooltipProvider>
   );

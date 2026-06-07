@@ -8,6 +8,7 @@ import {
   Save,
   SaveAll,
   Undo2,
+  X,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -31,6 +32,7 @@ interface ToolbarProps {
   onUndo: () => void
   onRedo: () => void
   onModeChange: (mode: EditorMode) => void
+  onExit?: () => void
 }
 
 export function Toolbar({
@@ -49,6 +51,7 @@ export function Toolbar({
   onUndo,
   onRedo,
   onModeChange,
+  onExit,
 }: ToolbarProps) {
   const historyDisabled = mode === "source"
 
@@ -140,6 +143,16 @@ export function Toolbar({
       </ToggleGroup>
 
       <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+        {onExit ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onExit}
+            data-testid="tb-exit"
+          >
+            <X /> 終了
+          </Button>
+        ) : null}
         {!fsaSupported && (
           <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
             保存はダウンロードになります

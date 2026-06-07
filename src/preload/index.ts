@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import type {
+  AddPageOptions,
   Deck,
+  DeletePageOptions,
+  DuplicatePageOptions,
   EditorApi,
   EditorDocument,
   FindRequest,
@@ -9,6 +12,8 @@ import type {
   NavigationState,
   RecentFolder,
   SearchResult,
+  TocEntry,
+  TocSnapshot,
   ViewBounds,
   ViewerApi
 } from "../shared/types.js";
@@ -43,6 +48,19 @@ const api: ViewerApi = {
   stopFindInPage: () => ipcRenderer.invoke("viewer:stop-find-in-page") as Promise<void>,
   openEditor: (pagePath: string) =>
     ipcRenderer.invoke("viewer:open-editor", pagePath) as Promise<void>,
+  getToc: () => ipcRenderer.invoke("deck:get-toc") as Promise<TocSnapshot>,
+  getMenuJsonText: () =>
+    ipcRenderer.invoke("deck:get-menu-json-text") as Promise<string>,
+  saveMenuJsonText: (text: string) =>
+    ipcRenderer.invoke("deck:save-menu-json-text", text) as Promise<Deck>,
+  updateToc: (entries: TocEntry[]) =>
+    ipcRenderer.invoke("deck:update-toc", entries) as Promise<Deck>,
+  addPage: (options: AddPageOptions) =>
+    ipcRenderer.invoke("deck:add-page", options) as Promise<{ path: string }>,
+  duplicatePage: (options: DuplicatePageOptions) =>
+    ipcRenderer.invoke("deck:duplicate-page", options) as Promise<{ path: string }>,
+  deletePage: (options: DeletePageOptions) =>
+    ipcRenderer.invoke("deck:delete-page", options) as Promise<void>,
   focusSearch: (clickPoint?: InputPoint) =>
     ipcRenderer.invoke("viewer:focus-search", clickPoint) as Promise<void>,
   focusDocument: () => ipcRenderer.invoke("viewer:focus-document") as Promise<void>,
@@ -63,7 +81,8 @@ const api: ViewerApi = {
 const editorApi: EditorApi = {
   getInitialDocument: () =>
     ipcRenderer.invoke("editor:get-initial-document") as Promise<EditorDocument | null>,
-  savePage: (html: string) => ipcRenderer.invoke("editor:save-page", html) as Promise<void>
+  savePage: (html: string) => ipcRenderer.invoke("editor:save-page", html) as Promise<void>,
+  close: () => ipcRenderer.invoke("editor:close") as Promise<void>
 };
 
 contextBridge.exposeInMainWorld("editorApi", editorApi);
