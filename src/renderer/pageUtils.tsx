@@ -23,15 +23,15 @@ export function statusLabel(page: DeckPage): string {
 
 export function pageIcon(page: DeckPage) {
   if (page.kind === "missing") {
-    return <FileX className="size-3.5" />;
+    return <FileX className="size-3.5 shrink-0" />;
   }
   if (page.kind === "out-of-scope") {
-    return <FileWarning className="size-3.5" />;
+    return <FileWarning className="size-3.5 shrink-0" />;
   }
   if (page.kind === "external") {
-    return <ExternalLink className="size-3.5" />;
+    return <ExternalLink className="size-3.5 shrink-0" />;
   }
-  return <FileText className="size-3.5" />;
+  return <FileText className="size-3.5 shrink-0" />;
 }
 
 export function clampZoom(value: number): number {

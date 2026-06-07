@@ -62,8 +62,8 @@ function PageRow({
   const hasNestedItems = page.children.length > 0 || page.anchors.length > 0;
 
   return (
-    <div data-testid="page-row">
-      <div className="group/row relative flex items-stretch">
+    <div data-testid="page-row" className="min-w-0">
+      <div className="group/row grid min-w-0">
         <button
           type="button"
           disabled={disabled}
@@ -79,7 +79,7 @@ function PageRow({
             void onNavigateTo(page, page.href, page.kind === "external");
           }}
           className={cn(
-            "flex min-h-[52px] w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors",
+            "[grid-area:1/-1] flex min-h-[52px] min-w-0 w-full items-center gap-2.5 overflow-hidden rounded-lg px-2 py-1.5 text-left transition-colors",
             nested ? "pl-3" : "pl-2",
             hasNestedItems ? "pr-9" : "pr-2",
             disabled ? "cursor-not-allowed opacity-50" : "hover:bg-accent",
@@ -99,9 +99,9 @@ function PageRow({
           </span>
           <span className="flex min-w-0 flex-col">
             <span className="truncate text-sm font-medium">{page.title}</span>
-            <span className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+            <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
               {pageIcon(page)}
-              <span className="truncate">{statusLabel(page)}</span>
+              <span className="min-w-0 truncate">{statusLabel(page)}</span>
             </span>
           </span>
         </button>
@@ -111,8 +111,11 @@ function PageRow({
             size="icon-xs"
             aria-label={page.children.length > 0 ? "子ページを表示" : "アンカーを表示"}
             aria-expanded={isExpanded}
-            className="absolute top-1/2 right-1.5 -translate-y-1/2 text-muted-foreground transition-none active:-translate-y-1/2"
-            onClick={() => onToggleExpanded(page.id)}
+            className="[grid-area:1/-1] justify-self-end self-center mr-1.5 text-muted-foreground"
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleExpanded(page.id);
+            }}
           >
             <ChevronDown
               className={cn("transition-none", isExpanded && "rotate-180")}

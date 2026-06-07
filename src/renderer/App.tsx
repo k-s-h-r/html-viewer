@@ -403,9 +403,6 @@ export default function App() {
       resetSidebarLayout();
       setSidebarLayoutVersion((version) => version + 1);
     });
-    const cleanupReloadRequested = window.viewerApi.onReloadRequested(() => {
-      void handleReload();
-    });
 
     return () => {
       cleanupDeck();
@@ -414,9 +411,14 @@ export default function App() {
       cleanupZoom();
       cleanupFocusSearch();
       cleanupSidebarLayoutReset();
-      cleanupReloadRequested();
     };
-  }, [applyDeck, focusSearchInput, handleReload, updateRecentFolders]);
+  }, [applyDeck, focusSearchInput, updateRecentFolders]);
+
+  useEffect(() => {
+    return window.viewerApi.onReloadRequested(() => {
+      void handleReload();
+    });
+  }, [handleReload]);
 
   useEffect(() => {
     return window.viewerApi.onDocumentEscape(() => {
