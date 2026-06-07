@@ -23,6 +23,7 @@ interface ToolbarProps {
   canUndo: boolean
   canRedo: boolean
   fsaSupported: boolean
+  hostMode?: boolean
   onNew: () => void
   onOpen: () => void
   onSave: () => void
@@ -40,6 +41,7 @@ export function Toolbar({
   canUndo,
   canRedo,
   fsaSupported,
+  hostMode = false,
   onNew,
   onOpen,
   onSave,
@@ -57,14 +59,18 @@ export function Toolbar({
       </div>
       <Separator orientation="vertical" className="mx-1 h-6 data-vertical:self-auto" />
 
-      <Button variant="ghost" size="sm" onClick={onNew} data-testid="tb-new">
-        <FilePlus2 /> 新規
-      </Button>
-      <Button variant="ghost" size="sm" onClick={onOpen} data-testid="tb-open">
-        <FolderOpen /> 開く
-      </Button>
+      {!hostMode ? (
+        <>
+          <Button variant="ghost" size="sm" onClick={onNew} data-testid="tb-new">
+            <FilePlus2 /> 新規
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onOpen} data-testid="tb-open">
+            <FolderOpen /> 開く
+          </Button>
+        </>
+      ) : null}
       <Button
-        variant="ghost"
+        variant={dirty ? "default" : "ghost"}
         size="sm"
         disabled={!hasDocument}
         onClick={onSave}
@@ -72,15 +78,17 @@ export function Toolbar({
       >
         <Save /> 保存
       </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        disabled={!hasDocument}
-        onClick={onSaveAs}
-        data-testid="tb-save-as"
-      >
-        <SaveAll /> 別名保存
-      </Button>
+      {!hostMode ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={!hasDocument}
+          onClick={onSaveAs}
+          data-testid="tb-save-as"
+        >
+          <SaveAll /> 別名保存
+        </Button>
+      ) : null}
 
       <Separator orientation="vertical" className="mx-1 h-6 data-vertical:self-auto" />
 
@@ -121,9 +129,11 @@ export function Toolbar({
         <ToggleGroupItem value="edit" data-testid="tb-mode-edit">
           <Pencil /> 編集
         </ToggleGroupItem>
-        <ToggleGroupItem value="view" data-testid="tb-mode-view">
-          <Eye /> 閲覧
-        </ToggleGroupItem>
+        {!hostMode ? (
+          <ToggleGroupItem value="view" data-testid="tb-mode-view">
+            <Eye /> 閲覧
+          </ToggleGroupItem>
+        ) : null}
         <ToggleGroupItem value="source" data-testid="tb-mode-source">
           <Code /> ソース
         </ToggleGroupItem>

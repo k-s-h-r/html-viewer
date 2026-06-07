@@ -548,6 +548,7 @@ export function App() {
         canUndo={canUndo}
         canRedo={canRedo}
         fsaSupported={fsaSupported}
+        hostMode={hostMode}
         onNew={handleNew}
         onOpen={handleOpen}
         onSave={handleSave}
