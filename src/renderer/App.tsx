@@ -10,7 +10,7 @@ import type {
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { formatGlobalFindCounter } from "./searchCounter";
-import { clampZoom, findPageIndex, canNavigate } from "./pageUtils";
+import { clampZoom, findPageIndex, firstNavigablePagePath, canNavigate } from "./pageUtils";
 import { Toolbar } from "./components/Toolbar";
 import { TocSidebar } from "./components/TocSidebar";
 import { ViewerSection } from "./components/ViewerSection";
@@ -60,7 +60,7 @@ export default function App() {
     setFindResult(null);
     setSearchQuery("");
     setSubmittedQuery("");
-    setSelectedPath(null);
+    setSelectedPath(firstNavigablePagePath(nextDeck));
     setSelectedHash(null);
     setExpandedPages(new Set());
   }, []);
@@ -376,7 +376,6 @@ export default function App() {
       setError(null);
       const nextDeck = await window.viewerApi.openFolder();
       if (nextDeck) {
-        applyDeck(nextDeck);
         await updateRecentFolders();
       }
     } catch (openError) {
@@ -389,7 +388,6 @@ export default function App() {
       setError(null);
       const nextDeck = await window.viewerApi.openRecentFolder(folderPath);
       if (nextDeck) {
-        applyDeck(nextDeck);
         await updateRecentFolders();
       }
     } catch (openError) {

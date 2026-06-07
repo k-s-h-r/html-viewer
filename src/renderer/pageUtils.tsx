@@ -35,6 +35,10 @@ export function clampZoom(value: number): number {
   return Math.min(2, Math.max(0.5, Number(value.toFixed(2))));
 }
 
+export function firstNavigablePagePath(deck: Deck | null): string | null {
+  return deck?.pages.find((page) => page.kind === "page")?.path ?? null;
+}
+
 export function findPageIndex(deck: Deck | null, selectedPath: string | null): number {
   if (!deck || !selectedPath) {
     return -1;
