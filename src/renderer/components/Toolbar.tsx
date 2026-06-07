@@ -11,6 +11,7 @@ import {
   Minus,
   PanelLeft,
   PanelRight,
+  PencilLine,
   Plus,
   Search,
   X
@@ -49,6 +50,7 @@ type ToolbarProps = {
   resultsPaneVisible: boolean;
   onOpenFolder: () => void;
   onOpenRecentFolder: (folderPath: string) => void;
+  onOpenEditor: () => void;
   onSearchQueryChange: (value: string) => void;
   onClearSearch: () => void;
   onMatchCaseToggle: () => void;
@@ -76,6 +78,7 @@ export function Toolbar({
   resultsPaneVisible,
   onOpenFolder,
   onOpenRecentFolder,
+  onOpenEditor,
   onSearchQueryChange,
   onClearSearch,
   onMatchCaseToggle,
@@ -126,6 +129,25 @@ export function Toolbar({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      <Separator orientation="vertical" className="mx-1 h-6 my-auto" />
+
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              disabled={!deck}
+              aria-label="現在ページを編集"
+              onClick={onOpenEditor}
+            >
+              <PencilLine />
+            </Button>
+          }
+        />
+        <TooltipContent side="top">現在ページを編集</TooltipContent>
+      </Tooltip>
 
       <Separator orientation="vertical" className="mx-1 h-6 my-auto" />
 

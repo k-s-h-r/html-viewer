@@ -446,6 +446,18 @@ export default function App() {
     }
   };
 
+  const openEditor = async () => {
+    if (!selectedPath) {
+      return;
+    }
+    try {
+      setError(null);
+      await window.viewerApi.openEditor(selectedPath);
+    } catch (openError) {
+      setError(openError instanceof Error ? openError.message : String(openError));
+    }
+  };
+
   const toggleExpanded = (pageId: string) => {
     setExpandedPages((current) => {
       const next = new Set(current);
@@ -501,6 +513,7 @@ export default function App() {
             resultsPaneVisible={resultsPaneVisible}
             onOpenFolder={() => void openFolder()}
             onOpenRecentFolder={(folderPath) => void openRecentFolder(folderPath)}
+            onOpenEditor={() => void openEditor()}
             onSearchQueryChange={setSearchQuery}
             onClearSearch={() => void clearSearch()}
             onMatchCaseToggle={() => setMatchCase((value) => !value)}

@@ -18,7 +18,13 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL("./index.html", import.meta.url)),
+        editor: fileURLToPath(new URL("./editor.html", import.meta.url))
+      }
+    }
   },
   test: {
     exclude: ["**/node_modules/**", "**/dist/**", "e2e/**"]

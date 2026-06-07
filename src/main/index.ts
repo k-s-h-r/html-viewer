@@ -12,6 +12,8 @@ import {
 } from "electron";
 import type {
   Deck,
+  DeckPage,
+  EditorDocument,
   FindRequest,
   FindResult,
   InputPoint,
@@ -19,7 +21,7 @@ import type {
   RecentFolder,
   ViewBounds
 } from "../shared/types.js";
-import { buildDeck, findDeckPageByHref, flattenDeckPages, splitHref } from "./deck.js";
+import { buildDeck, findDeckPageByHref, flattenDeckPages, localPathFromPage, splitHref } from "./deck.js";
 import { startLocalServer, type LocalServerHandle } from "./localServer.js";
 import { SearchCatalog } from "./search.js";
 
@@ -34,6 +36,7 @@ let documentView: WebContentsView | null = null;
 let currentDeck: Deck | null = null;
 let localServer: LocalServerHandle | null = null;
 let searchCatalog: SearchCatalog | null = null;
+const editorSessions = new Map<number, { pagePath: string }>();
 let recentFolders: RecentFolder[] = [];
 let zoomFactor = 1;
 let isStoppingForQuit = false;
@@ -380,6 +383,106 @@ async function loadHref(href: string): Promise<void> {
   await documentView.webContents.loadURL(localServer.toUrl(`${page.path}${hash}`));
 }
 
+function findDeckPageByPath(pagePath: string): DeckPage | undefined {
+  if (!currentDeck) {
+    return undefined;
+  }
+  return flattenDeckPages(currentDeck.pages).find(
+    (page) => page.kind === "page" && page.path === pagePath
+  );
+}
+
+function editorRendererUrl(): string {
+  if (process.env.VITE_DEV_SERVER_URL) {
+    return new URL("editor.html", process.env.VITE_DEV_SERVER_URL).toString();
+  }
+  return `file://${path.join(__dirname, "../../dist/editor.html")}`;
+}
+
+async function editorDocumentForPage(pagePath: string): Promise<EditorDocument> {
+  if (!currentDeck || !localServer) {
+    throw new Error("編集する仕様書フォルダが開かれていません。");
+  }
+
+  const page = findDeckPageByPath(pagePath);
+  if (!page) {
+    throw new Error("編集対象のHTMLページが見つかりません。");
+  }
+
+  const filePath = localPathFromPage(currentDeck.rootDir, page);
+  if (!filePath) {
+    throw new Error("編集対象のHTMLページが仕様書フォルダ外です。");
+  }
+
+  return {
+    html: await readFile(filePath, "utf8"),
+    name: path.basename(page.path),
+    pagePath: page.path,
+    baseHref: new URL("./", localServer.toUrl(page.path)).toString()
+  };
+}
+
+async function openEditorWindow(pagePath: string): Promise<void> {
+  const initialDocument = await editorDocumentForPage(pagePath);
+
+  const editorWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 980,
+    minHeight: 640,
+    title: `HTML仕様書エディター - ${initialDocument.name}`,
+    webPreferences: {
+      preload: path.join(__dirname, "../preload/index.js"),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+
+  editorSessions.set(editorWindow.webContents.id, {
+    pagePath: initialDocument.pagePath
+  });
+  editorWindow.on("closed", () => {
+    editorSessions.delete(editorWindow.webContents.id);
+  });
+
+  await editorWindow.loadURL(editorRendererUrl());
+}
+
+function currentDocumentPagePath(): string | null {
+  if (!documentView) {
+    return null;
+  }
+  return navigationStateFromUrl(documentView.webContents.getURL()).pagePath ?? null;
+}
+
+async function saveEditorPage(webContentsId: number, html: string): Promise<void> {
+  if (!currentDeck) {
+    throw new Error("保存先の仕様書フォルダが開かれていません。");
+  }
+
+  const session = editorSessions.get(webContentsId);
+  if (!session) {
+    throw new Error("編集セッションが見つかりません。");
+  }
+
+  const page = findDeckPageByPath(session.pagePath);
+  if (!page) {
+    throw new Error("保存先のHTMLページが見つかりません。");
+  }
+
+  const filePath = localPathFromPage(currentDeck.rootDir, page);
+  if (!filePath) {
+    throw new Error("保存先のHTMLページが仕様書フォルダ外です。");
+  }
+
+  await writeFile(filePath, html, "utf8");
+  searchCatalog = await SearchCatalog.create(currentDeck.rootDir, currentDeck);
+
+  if (currentDocumentPagePath() === page.path) {
+    documentView?.webContents.reloadIgnoringCache();
+  }
+}
+
 async function openFolderDialog(): Promise<Deck | null> {
   if (!mainWindow) {
     return null;
@@ -442,6 +545,9 @@ ipcMain.handle("viewer:set-bounds", (_event, bounds: ViewBounds) => setViewBound
 ipcMain.handle("viewer:set-zoom-factor", (_event, factor: number) => {
   setBrowserZoomFactor(factor);
 });
+ipcMain.handle("viewer:open-editor", (_event, pagePath: string) =>
+  openEditorWindow(pagePath)
+);
 ipcMain.handle("search:query", (_event, query: string, matchCase: boolean) => {
   return (
     searchCatalog?.query(query, matchCase) ?? {
@@ -487,6 +593,13 @@ ipcMain.handle("viewer:find-in-page", async (_event, request: FindRequest) => {
 ipcMain.handle("viewer:stop-find-in-page", () => {
   documentView?.webContents.stopFindInPage("clearSelection");
 });
+ipcMain.handle("editor:get-initial-document", (event) => {
+  const session = editorSessions.get(event.sender.id);
+  return session ? editorDocumentForPage(session.pagePath) : null;
+});
+ipcMain.handle("editor:save-page", (event, html: string) =>
+  saveEditorPage(event.sender.id, html)
+);
 
 app
   .whenReady()

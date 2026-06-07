@@ -1,9 +1,10 @@
 /// <reference types="vite/client" />
 
-import type { ViewerApi } from "../shared/types";
+import type { EditorApi, ViewerApi } from "../shared/types";
 
 declare global {
   interface Window {
+    editorApi: EditorApi;
     viewerApi: ViewerApi;
   }
 }
