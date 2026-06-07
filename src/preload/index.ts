@@ -84,7 +84,8 @@ const editorApi: EditorApi = {
   getInitialDocument: () =>
     ipcRenderer.invoke("editor:get-initial-document") as Promise<EditorDocument | null>,
   savePage: (html: string) => ipcRenderer.invoke("editor:save-page", html) as Promise<void>,
-  close: () => ipcRenderer.invoke("editor:close") as Promise<void>
+  close: () => ipcRenderer.invoke("editor:close") as Promise<void>,
+  onCloseRequested: (callback: () => void) => on("editor:close-requested", callback)
 };
 
 contextBridge.exposeInMainWorld("editorApi", editorApi);

@@ -561,7 +561,16 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey)
   }, [handleSave, handleUndo, handleRedo, mode])
 
-  // 未保存時の離脱警告（終了ボタンで確認済みの場合はスキップ）
+  // OS の閉じるボタン（Electron）→ 終了ボタンと同じ確認フロー
+  useEffect(() => {
+    const api = getHostApi()
+    if (!api) return
+    return api.onCloseRequested(() => {
+      void handleExit()
+    })
+  }, [handleExit])
+
+  // 未保存時の離脱警告（ブラウザ単体起動時。終了ボタンで確認済みの場合はスキップ）
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (allowCloseRef.current) return

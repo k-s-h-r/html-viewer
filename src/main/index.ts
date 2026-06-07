@@ -43,6 +43,7 @@ let currentDeck: Deck | null = null;
 let localServer: LocalServerHandle | null = null;
 let searchCatalog: SearchCatalog | null = null;
 const editorSessions = new Map<number, { pagePath: string }>();
+const editorCloseAllowed = new WeakSet<BrowserWindow>();
 let recentFolders: RecentFolder[] = [];
 let zoomFactor = 1;
 let isStoppingForQuit = false;
@@ -554,6 +555,14 @@ async function openEditorWindow(pagePath: string): Promise<void> {
   editorSessions.set(editorWindow.webContents.id, {
     pagePath: initialDocument.pagePath
   });
+  editorWindow.on("close", (event) => {
+    if (editorCloseAllowed.has(editorWindow)) {
+      editorCloseAllowed.delete(editorWindow);
+      return;
+    }
+    event.preventDefault();
+    editorWindow.webContents.send("editor:close-requested");
+  });
   editorWindow.on("closed", () => {
     editorSessions.delete(editorWindow.webContents.id);
   });
@@ -797,7 +806,11 @@ ipcMain.handle("editor:save-page", (event, html: string) =>
 );
 ipcMain.handle("editor:close", (event) => {
   const window = BrowserWindow.fromWebContents(event.sender);
-  window?.close();
+  if (!window) {
+    return;
+  }
+  editorCloseAllowed.add(window);
+  window.close();
 });
 
 app
