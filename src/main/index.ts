@@ -89,12 +89,66 @@ function setBrowserZoomFactor(factor: number): void {
   sendToRenderer("viewer:zoom-changed", zoomFactor);
 }
 
-function lockRendererZoom(window: BrowserWindow): void {
-  window.webContents.setZoomFactor(1);
-  window.webContents.setVisualZoomLevelLimits(1, 1);
-  window.webContents.on("zoom-changed", () => {
-    window.webContents.setZoomFactor(1);
+function resetRendererZoom(contents: Electron.WebContents): void {
+  contents.setZoomFactor(1);
+  contents.setZoomLevel(0);
+}
+
+function isZoomAccelerator(input: Electron.Input): boolean {
+  if (!(input.control || input.meta)) {
+    return false;
+  }
+  if (input.type === "mouseWheel") {
+    return true;
+  }
+  if (input.type === "keyDown") {
+    return input.key === "=" || input.key === "+" || input.key === "-" || input.key === "0";
+  }
+  return false;
+}
+
+function handleZoomAccelerator(input: Electron.Input): void {
+  if (input.type === "mouseWheel") {
+    const deltaY = "deltaY" in input && typeof input.deltaY === "number" ? input.deltaY : 0;
+    adjustBrowserZoom(deltaY < 0 ? 0.1 : -0.1);
+    return;
+  }
+  if (input.key === "=" || input.key === "+") {
+    adjustBrowserZoom(0.1);
+    return;
+  }
+  if (input.key === "-") {
+    adjustBrowserZoom(-0.1);
+    return;
+  }
+  if (input.key === "0") {
+    setBrowserZoomFactor(1);
+  }
+}
+
+function registerZoomRouting(
+  contents: Electron.WebContents,
+  options: { routeToDocument: boolean }
+): void {
+  contents.on("before-input-event", (event, input) => {
+    if (!isZoomAccelerator(input)) {
+      return;
+    }
+    event.preventDefault();
+    if (options.routeToDocument) {
+      handleZoomAccelerator(input);
+    }
   });
+}
+
+function lockRendererZoom(window: BrowserWindow): void {
+  const contents = window.webContents;
+  resetRendererZoom(contents);
+  contents.setVisualZoomLevelLimits(1, 1);
+  contents.on("zoom-changed", () => {
+    resetRendererZoom(contents);
+  });
+  registerZoomRouting(contents, { routeToDocument: true });
 }
 
 function adjustBrowserZoom(delta: number): void {
@@ -252,17 +306,21 @@ function focusSidebarInRenderer(): void {
 
 function registerDocumentKeyboardShortcuts(contents: Electron.WebContents): void {
   contents.on("before-input-event", (event, input) => {
-    if (input.type !== "keyDown") {
-      return;
+    if (input.type === "keyDown") {
+      if ((input.control || input.meta) && input.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setTimeout(() => focusSearchInRenderer(), 0);
+        return;
+      }
+      if (input.key === "Escape") {
+        event.preventDefault();
+        sendToRenderer("viewer:document-escape", null);
+        return;
+      }
     }
-    if ((input.control || input.meta) && input.key.toLowerCase() === "f") {
+    if (isZoomAccelerator(input)) {
       event.preventDefault();
-      setTimeout(() => focusSearchInRenderer(), 0);
-      return;
-    }
-    if (input.key === "Escape") {
-      event.preventDefault();
-      sendToRenderer("viewer:document-escape", null);
+      handleZoomAccelerator(input);
     }
   });
 }
@@ -270,6 +328,7 @@ function registerDocumentKeyboardShortcuts(contents: Electron.WebContents): void
 function createDocumentView(): WebContentsView {
   const view = new WebContentsView({
     webPreferences: {
+      partition: "persist:html-viewer-document",
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,

@@ -469,18 +469,6 @@ export default function App() {
           event.preventDefault();
           void ensureSearchInputFocused();
         }
-        if (event.key === "=" || event.key === "+") {
-          event.preventDefault();
-          void setZoomFactor(zoom + 0.1);
-        }
-        if (event.key === "-") {
-          event.preventDefault();
-          void setZoomFactor(zoom - 0.1);
-        }
-        if (event.key === "0") {
-          event.preventDefault();
-          void setZoomFactor(1);
-        }
         return;
       }
 
@@ -498,7 +486,7 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [ensureSearchInputFocused, focusMode, navigateByOffset, setZoomFactor, zoom]);
+  }, [ensureSearchInputFocused, focusMode, navigateByOffset]);
 
   const openFolder = async () => {
     try {
