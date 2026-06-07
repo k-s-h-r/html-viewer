@@ -37,6 +37,7 @@ import {
   SOURCE_SCROLL_ANCHOR_TEXT,
   stripSourceScrollAnchor,
 } from "@/editor/sourceScroll"
+import { resolveDocumentBaseHref } from "@/editor/baseHref"
 import { harvestStyleCatalog } from "@/editor/styleProps"
 import {
   pickImageAsDataUrl,
@@ -257,6 +258,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     htmlHandle: null,
     projectDirHandle: null,
   })
+  const baseHrefRef = useRef<string | null>(null)
   const [selectBoxes, setSelectBoxes] = useState<SelectBoxOverlay[]>([])
   const [hoverBox, setHoverBox] = useState<Box | null>(null)
   const [pendingPastedImage, setPendingPastedImage] = useState<File | null>(
@@ -907,6 +909,11 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     (html: string, options?: LoadHtmlOptions) => {
       const iframe = iframeRef.current
       if (!iframe) return
+      const { persisted, effective } = resolveDocumentBaseHref(
+        baseHrefRef.current,
+        options
+      )
+      baseHrefRef.current = persisted
       if (options?.clearMediaPreviews) clearMediaPreviewRegistry()
       editingElRef.current = null
       selectedElRef.current = null
@@ -917,7 +924,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       const doc = iframe.contentDocument
       if (!doc) return
       doc.open()
-      doc.write(injectBaseHref(html, options?.baseHref))
+      doc.write(injectBaseHref(html, effective))
       doc.close()
 
       const style = doc.createElement("style")
