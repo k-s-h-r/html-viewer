@@ -112,4 +112,5 @@ export interface ViewerApi {
   onFocusSearch(callback: () => void): () => void;
   onUiFocusRestored(callback: () => void): () => void;
   onDocumentEscape(callback: () => void): () => void;
+  onSidebarLayoutReset(callback: () => void): () => void;
 }

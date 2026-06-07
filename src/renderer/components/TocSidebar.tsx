@@ -261,7 +261,7 @@ export function TocSidebar({
   return (
     <aside
       data-testid="toc-sidebar"
-      className="flex w-72 shrink-0 flex-col overflow-hidden border bg-card"
+      className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden border bg-card"
       onKeyDown={handleSidebarKeyDown}
     >
       <div className="flex items-center justify-between gap-2 border-b px-4 py-3">

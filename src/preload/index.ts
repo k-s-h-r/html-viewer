@@ -52,7 +52,8 @@ const api: ViewerApi = {
     on("viewer:zoom-changed", callback),
   onFocusSearch: (callback: () => void) => on("viewer:focus-search", callback),
   onUiFocusRestored: (callback: () => void) => on("viewer:ui-focus-restored", callback),
-  onDocumentEscape: (callback: () => void) => on("viewer:document-escape", callback)
+  onDocumentEscape: (callback: () => void) => on("viewer:document-escape", callback),
+  onSidebarLayoutReset: (callback: () => void) => on("settings:reset-sidebar-layout", callback)
 };
 
 contextBridge.exposeInMainWorld("viewerApi", api);
