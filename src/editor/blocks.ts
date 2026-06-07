@@ -20,7 +20,7 @@ export interface BlockTemplate {
   group: BlockGroupId
 }
 
-/** ブロックパレット。仕様書でよく使う要素を中心に用意 */
+/** ブロックパレット。HTML ページでよく使う要素を中心に用意 */
 export const BLOCK_TEMPLATES: BlockTemplate[] = [
   { id: "h2", label: "見出し (H2)", html: "<h2>見出し</h2>", group: "html" },
   { id: "h3", label: "小見出し (H3)", html: "<h3>小見出し</h3>", group: "html" },

@@ -98,7 +98,7 @@ function errorMessage(error: unknown): string {
 }
 
 function showOpenFolderError(error: unknown): void {
-  dialog.showErrorBox("仕様書フォルダを開けません", errorMessage(error));
+  dialog.showErrorBox("フォルダを開けません", errorMessage(error));
 }
 
 function setBrowserZoomFactor(factor: number): void {
@@ -409,7 +409,7 @@ async function createMainWindow(): Promise<void> {
     height: 900,
     minWidth: 720,
     minHeight: 640,
-    title: "HTML仕様書ビューワー",
+    title: "SpecDeck",
     ...windowIconOptions(),
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
@@ -562,14 +562,14 @@ async function resolveEditorTarget(
   pagePath: string
 ): Promise<{ filePath: string; resolvedPagePath: string; name: string }> {
   if (!currentDeck || !localServer) {
-    throw new Error("編集する仕様書フォルダが開かれていません。");
+    throw new Error("フォルダが開かれていません。");
   }
 
   const normalizedPath = pagePath.split(path.sep).join("/");
   if (normalizedPath.toLowerCase() === "index.html") {
     const filePath = path.join(currentDeck.rootDir, "index.html");
     if (!isInsideDeckRoot(filePath)) {
-      throw new Error("編集対象のHTMLページが仕様書フォルダ外です。");
+      throw new Error("編集対象の HTML ページがフォルダ外です。");
     }
     return {
       filePath,
@@ -585,7 +585,7 @@ async function resolveEditorTarget(
 
   const filePath = localPathFromPage(currentDeck.rootDir, page);
   if (!filePath) {
-    throw new Error("編集対象のHTMLページが仕様書フォルダ外です。");
+    throw new Error("編集対象の HTML ページがフォルダ外です。");
   }
 
   return {
@@ -622,7 +622,7 @@ async function openEditorWindow(pagePath: string): Promise<void> {
     height: 900,
     minWidth: 980,
     minHeight: 640,
-    title: `HTML仕様書エディター - ${initialDocument.name}`,
+    title: `SpecDeck Editor - ${initialDocument.name}`,
     ...windowIconOptions(),
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
@@ -677,7 +677,7 @@ async function refreshDocumentViewIfShowingPage(pagePath: string): Promise<void>
 
 async function saveEditorPage(webContentsId: number, html: string): Promise<void> {
   if (!currentDeck) {
-    throw new Error("保存先の仕様書フォルダが開かれていません。");
+    throw new Error("保存先のフォルダが開かれていません。");
   }
 
   const session = editorSessions.get(webContentsId);
@@ -710,7 +710,7 @@ async function openFolderDialog(): Promise<Deck | null> {
 
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ["openDirectory"],
-    title: "仕様書フォルダを選択"
+    title: "フォルダを選択"
   });
 
   if (result.canceled || result.filePaths.length === 0) {
@@ -722,7 +722,7 @@ async function openFolderDialog(): Promise<Deck | null> {
 
 function requireCurrentDeckRoot(): string {
   if (!currentDeck) {
-    throw new Error("仕様書フォルダが開かれていません。");
+    throw new Error("フォルダが開かれていません。");
   }
   return currentDeck.rootDir;
 }

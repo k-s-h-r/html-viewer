@@ -172,7 +172,7 @@ export async function createPageFile(
 ): Promise<void> {
   const targetPath = path.resolve(rootDir, relativePath);
   if (!isInsideRoot(rootDir, targetPath)) {
-    throw new Error("ページの保存先が仕様書フォルダ外です。");
+    throw new Error("ページの保存先がフォルダ外です。");
   }
 
   if (await fileExists(targetPath)) {
@@ -227,7 +227,7 @@ export async function duplicatePage(
   const sourcePath = toPosix(options.sourcePath);
   const sourceFile = path.resolve(rootDir, sourcePath);
   if (!isInsideRoot(rootDir, sourceFile)) {
-    throw new Error("複製元のページが仕様書フォルダ外です。");
+    throw new Error("複製元のページがフォルダ外です。");
   }
   if (!(await fileExists(sourceFile))) {
     throw new Error("複製元のページが見つかりません。");
@@ -276,7 +276,7 @@ export async function deletePage(
 
   const targetFile = path.resolve(rootDir, targetPath);
   if (!isInsideRoot(rootDir, targetFile)) {
-    throw new Error("削除対象のページが仕様書フォルダ外です。");
+    throw new Error("削除対象のページがフォルダ外です。");
   }
   if (!(await fileExists(targetFile))) {
     throw new Error("削除対象のページが見つかりません。");

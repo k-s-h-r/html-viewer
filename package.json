@@ -1,5 +1,6 @@
 {
-  "name": "html-viewer",
+  "name": "specdeck",
+  "description": "PPT-like viewer and editor for HTML specifications",
   "version": "0.1.0",
   "private": true,
   "type": "module",

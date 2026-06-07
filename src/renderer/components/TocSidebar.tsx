@@ -276,7 +276,7 @@ export function TocSidebar({
     >
       <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
         <span className="truncate text-sm font-semibold">
-          {deck?.rootName ?? "仕様書未選択"}
+          {deck?.rootName ?? "未選択"}
         </span>
         <div className="flex items-center gap-1.5">
           {deck ? (

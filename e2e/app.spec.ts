@@ -213,12 +213,12 @@ async function triggerFocusSearch(electronApp: ElectronApplication): Promise<voi
   });
 }
 
-test.describe("HTML Viewer", () => {
+test.describe("SpecDeck", () => {
   test("launches, lists pages, searches, toggles focus mode, and loads BrowserView", async () => {
     const { electronApp, window, userDataDir } = await launchApp();
 
     try {
-      await expect(window).toHaveTitle("HTML仕様書ビューワー");
+      await expect(window).toHaveTitle("SpecDeck");
       await expect(window.getByTestId("app-shell")).toBeVisible();
 
       const pageRows = window.getByTestId("page-row");
