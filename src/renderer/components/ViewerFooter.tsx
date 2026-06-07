@@ -6,14 +6,10 @@ import {
 } from "lucide-react";
 import type { Deck } from "../../shared/types";
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger
-} from "@/components/ui/tooltip";
 
 type ViewerFooterProps = {
   deck: Deck | null;
+  documentPath: string | null;
   selectedPageNumber: number;
   navigablePageCount: number;
   zoom: number;
@@ -23,6 +19,7 @@ type ViewerFooterProps = {
 
 export function ViewerFooter({
   deck,
+  documentPath,
   selectedPageNumber,
   navigablePageCount,
   zoom,
@@ -32,9 +29,9 @@ export function ViewerFooter({
   return (
     <footer
       data-testid="viewer-footer"
-      className="flex h-6 shrink-0 items-center justify-between border-t bg-background px-2"
+      className="flex h-6 shrink-0 items-center gap-2 border-t bg-background px-2"
     >
-      <div className="flex items-center gap-0.5">
+      <div className="flex shrink-0 items-center gap-0.5">
         <Button
           variant="ghost"
           size="icon-xs"
@@ -58,7 +55,18 @@ export function ViewerFooter({
         </Button>
       </div>
 
-      <div className="flex items-center gap-0.5">
+      <span
+        data-testid="document-path"
+        aria-label={documentPath ?? undefined}
+        dir="rtl"
+        className="block min-w-0 flex-1 truncate text-center font-mono text-xs text-muted-foreground"
+      >
+        <bdi dir="ltr" aria-hidden="true">
+          {documentPath ?? ""}
+        </bdi>
+      </span>
+
+      <div className="flex shrink-0 items-center gap-0.5">
         <Button
           variant="ghost"
           size="icon-xs"
@@ -67,21 +75,15 @@ export function ViewerFooter({
         >
           <Minus />
         </Button>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="xs"
-                className="min-w-[40px] px-1 tabular-nums"
-                onClick={() => void onSetZoomFactor(1)}
-              >
-                {Math.round(zoom * 100)}%
-              </Button>
-            }
-          />
-          <TooltipContent side="top">100%に戻す</TooltipContent>
-        </Tooltip>
+        <Button
+          variant="ghost"
+          size="xs"
+          className="min-w-[40px] px-1 tabular-nums"
+          aria-label="100%に戻す"
+          onClick={() => void onSetZoomFactor(1)}
+        >
+          {Math.round(zoom * 100)}%
+        </Button>
         <Button
           variant="ghost"
           size="icon-xs"

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/resizable";
 import { cn } from "@/lib/utils";
 import { formatGlobalFindCounter } from "./searchCounter";
+import { absolutePagePath } from "../shared/deckUtils";
 import {
   clampZoom,
   firstNavigablePagePath,
@@ -695,6 +696,12 @@ export default function App() {
     () => formatGlobalFindCounter(submittedQuery, searchResult, selectedPath, findResult),
     [findResult, searchResult, selectedPath, submittedQuery]
   );
+  const documentPath = useMemo(() => {
+    if (!deck || !selectedPath) {
+      return null;
+    }
+    return absolutePagePath(deck.rootDir, selectedPath);
+  }, [deck, selectedPath]);
 
   const refindForward = submittedQuery.trim() ? true : undefined;
 
@@ -809,6 +816,7 @@ export default function App() {
         {!focusMode ? (
           <ViewerFooter
             deck={deck}
+            documentPath={documentPath}
             selectedPageNumber={selectedPageNumber}
             navigablePageCount={navigablePages.length}
             zoom={zoom}
