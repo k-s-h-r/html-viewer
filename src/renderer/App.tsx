@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/resizable";
 import { cn } from "@/lib/utils";
 import { formatGlobalFindCounter } from "./searchCounter";
+import { absolutePagePath } from "../shared/deckUtils";
 import {
   clampZoom,
   firstNavigablePagePath,
@@ -26,6 +27,7 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { Toolbar } from "./components/Toolbar";
+import { ViewerFooter } from "./components/ViewerFooter";
 import { TocSidebar } from "./components/TocSidebar";
 import { AddPageDialog } from "./components/AddPageDialog";
 import { MenuJsonEditorDialog } from "./components/MenuJsonEditorDialog";
@@ -468,18 +470,6 @@ export default function App() {
           event.preventDefault();
           void ensureSearchInputFocused();
         }
-        if (event.key === "=" || event.key === "+") {
-          event.preventDefault();
-          void setZoomFactor(zoom + 0.1);
-        }
-        if (event.key === "-") {
-          event.preventDefault();
-          void setZoomFactor(zoom - 0.1);
-        }
-        if (event.key === "0") {
-          event.preventDefault();
-          void setZoomFactor(1);
-        }
         return;
       }
 
@@ -497,7 +487,7 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [ensureSearchInputFocused, focusMode, navigateByOffset, setZoomFactor, zoom]);
+  }, [ensureSearchInputFocused, focusMode, navigateByOffset]);
 
   const openFolder = async () => {
     try {
@@ -706,6 +696,12 @@ export default function App() {
     () => formatGlobalFindCounter(submittedQuery, searchResult, selectedPath, findResult),
     [findResult, searchResult, selectedPath, submittedQuery]
   );
+  const documentPath = useMemo(() => {
+    if (!deck || !selectedPath) {
+      return null;
+    }
+    return absolutePagePath(deck.rootDir, selectedPath);
+  }, [deck, selectedPath]);
 
   const refindForward = submittedQuery.trim() ? true : undefined;
 
@@ -714,7 +710,7 @@ export default function App() {
       <div
         data-testid="app-shell"
         data-focus-mode={focusMode}
-        className="flex h-full w-full min-w-[960px] flex-col overflow-hidden bg-muted/40 text-foreground"
+        className="flex h-full w-full min-w-[720px] flex-col overflow-hidden bg-muted/40 text-foreground"
       >
         {!focusMode ? (
           <Toolbar
@@ -726,8 +722,6 @@ export default function App() {
             findCounter={findCounter}
             showResults={showResults}
             selectedPageNumber={selectedPageNumber}
-            navigablePageCount={navigablePages.length}
-            zoom={zoom}
             sidebarVisible={sidebarVisible}
             resultsPaneVisible={resultsPaneVisible}
             editMode={editMode}
@@ -743,8 +737,6 @@ export default function App() {
             onMatchCaseToggle={() => setMatchCase((value) => !value)}
             onExecuteSearch={() => void executeSearch()}
             onNavigateSearchAcrossPages={navigateSearchAcrossPages}
-            onNavigateByOffset={navigateByOffset}
-            onSetZoomFactor={setZoomFactor}
             onSidebarVisibleToggle={() => setSidebarVisible((visible) => !visible)}
             onResultsPaneVisibleToggle={() => setResultsPaneVisible((visible) => !visible)}
             onFocusModeEnable={() => setFocusMode(true)}
@@ -820,6 +812,18 @@ export default function App() {
             />
           ) : null}
         </main>
+
+        {!focusMode ? (
+          <ViewerFooter
+            deck={deck}
+            documentPath={documentPath}
+            selectedPageNumber={selectedPageNumber}
+            navigablePageCount={navigablePages.length}
+            zoom={zoom}
+            onNavigateByOffset={navigateByOffset}
+            onSetZoomFactor={setZoomFactor}
+          />
+        ) : null}
 
         <AddPageDialog
           open={addPageDialogOpen}

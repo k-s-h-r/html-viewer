@@ -2,20 +2,16 @@ import type { RefObject } from "react";
 import {
   CaseSensitive,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   ChevronUp,
   FolderOpen,
   History,
   Maximize2,
-  Minus,
   PanelLeft,
   PanelRight,
   Copy,
   PencilLine,
   RefreshCw,
   Trash2,
-  Plus,
   Search,
   X
 } from "lucide-react";
@@ -47,8 +43,6 @@ type ToolbarProps = {
   findCounter: string | null;
   showResults: boolean;
   selectedPageNumber: number;
-  navigablePageCount: number;
-  zoom: number;
   sidebarVisible: boolean;
   resultsPaneVisible: boolean;
   editMode: boolean;
@@ -64,8 +58,6 @@ type ToolbarProps = {
   onMatchCaseToggle: () => void;
   onExecuteSearch: () => void;
   onNavigateSearchAcrossPages: (forward: boolean) => void;
-  onNavigateByOffset: (offset: number) => void;
-  onSetZoomFactor: (zoom: number) => void;
   onSidebarVisibleToggle: () => void;
   onResultsPaneVisibleToggle: () => void;
   onFocusModeEnable: () => void;
@@ -80,8 +72,6 @@ export function Toolbar({
   findCounter,
   showResults,
   selectedPageNumber,
-  navigablePageCount,
-  zoom,
   sidebarVisible,
   resultsPaneVisible,
   editMode,
@@ -97,8 +87,6 @@ export function Toolbar({
   onMatchCaseToggle,
   onExecuteSearch,
   onNavigateSearchAcrossPages,
-  onNavigateByOffset,
-  onSetZoomFactor,
   onSidebarVisibleToggle,
   onResultsPaneVisibleToggle,
   onFocusModeEnable
@@ -336,64 +324,6 @@ export function Toolbar({
       <Separator orientation="vertical" className="mx-1 h-6 my-auto" />
 
       <div className="flex items-center gap-1.5">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          disabled={!deck}
-          aria-label="前のページ"
-          onClick={() => onNavigateByOffset(-1)}
-        >
-          <ChevronLeft />
-        </Button>
-        <span className="min-w-[64px] text-center text-sm tabular-nums text-muted-foreground">
-          {selectedPageNumber || "-"} / {navigablePageCount || "-"}
-        </span>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          disabled={!deck}
-          aria-label="次のページ"
-          onClick={() => onNavigateByOffset(1)}
-        >
-          <ChevronRight />
-        </Button>
-
-        <Separator orientation="vertical" className="mx-1 h-6 my-auto" />
-
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="縮小"
-          onClick={() => void onSetZoomFactor(zoom - 0.1)}
-        >
-          <Minus />
-        </Button>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="sm"
-                className="min-w-[52px] tabular-nums"
-                onClick={() => void onSetZoomFactor(1)}
-              >
-                {Math.round(zoom * 100)}%
-              </Button>
-            }
-          />
-          <TooltipContent side="top">100%に戻す</TooltipContent>
-        </Tooltip>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="拡大"
-          onClick={() => void onSetZoomFactor(zoom + 0.1)}
-        >
-          <Plus />
-        </Button>
-
-        <Separator orientation="vertical" className="mx-1 h-6" />
-
         <Tooltip>
           <TooltipTrigger
             render={

@@ -12,6 +12,14 @@ export function splitHref(href: string): { pathPart: string; hash: string } {
   };
 }
 
+export function absolutePagePath(rootDir: string, pagePath: string): string {
+  const root = rootDir.replace(/[\\/]+$/, "");
+  const segments = pagePath.replace(/\\/g, "/").split("/").filter(Boolean);
+  const useWindowsSep = /^[A-Za-z]:[\\/]/.test(root);
+  const sep = useWindowsSep ? "\\" : "/";
+  return [root, ...segments].join(sep);
+}
+
 export function flattenDeckPages(pages: DeckPage[]): DeckPage[] {
   const result: DeckPage[] = [];
   const walk = (page: DeckPage) => {
