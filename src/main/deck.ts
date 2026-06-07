@@ -2,6 +2,9 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { load } from "cheerio";
 import type { Deck, DeckAnchor, DeckPage } from "../shared/types.js";
+import { flattenDeckPages, splitHref } from "../shared/deckUtils.js";
+
+export { flattenDeckPages, splitHref };
 
 interface TocLink {
   href: string;
@@ -25,18 +28,6 @@ async function fileExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-export function splitHref(href: string): { pathPart: string; hash: string } {
-  const trimmed = href.trim();
-  const hashIndex = trimmed.indexOf("#");
-  const beforeHash = hashIndex >= 0 ? trimmed.slice(0, hashIndex) : trimmed;
-  const hash = hashIndex >= 0 ? trimmed.slice(hashIndex) : "";
-  const queryIndex = beforeHash.indexOf("?");
-  return {
-    pathPart: queryIndex >= 0 ? beforeHash.slice(0, queryIndex) : beforeHash,
-    hash
-  };
 }
 
 function isHtmlPath(pathPart: string): boolean {
@@ -117,20 +108,6 @@ function mergeKey(relativePath: string, tocNum: string | null): string {
     return `toc:${tocNum}`;
   }
   return `path:${relativePath}`;
-}
-
-export function flattenDeckPages(pages: DeckPage[]): DeckPage[] {
-  const result: DeckPage[] = [];
-  const walk = (page: DeckPage) => {
-    result.push(page);
-    for (const child of page.children) {
-      walk(child);
-    }
-  };
-  for (const page of pages) {
-    walk(page);
-  }
-  return result;
 }
 
 async function scanHtmlFiles(rootDir: string, currentDir = rootDir): Promise<string[]> {

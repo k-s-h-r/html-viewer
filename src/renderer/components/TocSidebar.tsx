@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { ChevronDown, PanelLeftClose } from "lucide-react";
 import type { Deck, DeckPage } from "../../shared/types";
 import { Button } from "@/components/ui/button";
@@ -38,7 +38,6 @@ type PageRowProps = {
   expandedPages: Set<string>;
   nested?: boolean;
   selectedPageButtonRef: React.MutableRefObject<HTMLButtonElement | null>;
-  deck: Deck | null;
   onToggleExpanded: (pageId: string) => void;
   onNavigateTo: (page: DeckPage, href?: string, openExternal?: boolean) => Promise<void>;
 };
@@ -51,7 +50,6 @@ function PageRow({
   expandedPages,
   nested = false,
   selectedPageButtonRef,
-  deck,
   onToggleExpanded,
   onNavigateTo
 }: PageRowProps) {
@@ -61,7 +59,7 @@ function PageRow({
   const hasNestedItems = page.children.length > 0 || page.anchors.length > 0;
 
   return (
-    <div key={page.id} data-testid="page-row">
+    <div data-testid="page-row">
       <div className="group/row relative flex items-stretch">
         <button
           type="button"
@@ -131,7 +129,6 @@ function PageRow({
               expandedPages={expandedPages}
               nested
               selectedPageButtonRef={selectedPageButtonRef}
-              deck={deck}
               onToggleExpanded={onToggleExpanded}
               onNavigateTo={onNavigateTo}
             />
@@ -177,6 +174,10 @@ export function TocSidebar({
 }: TocSidebarProps) {
   const selectedPageButtonRef = useRef<HTMLButtonElement | null>(null);
   const pendingSelectionRefocusRef = useRef(false);
+  const allPages = useMemo(
+    () => (deck ? flattenDeckPages(deck.pages) : []),
+    [deck]
+  );
 
   const refocusSelectedPage = useCallback(() => {
     const button = selectedPageButtonRef.current;
@@ -192,7 +193,7 @@ export function TocSidebar({
       return;
     }
 
-    const selectedPage = flattenDeckPages(deck.pages).find((page) =>
+    const selectedPage = allPages.find((page) =>
       pageMatchesSelection(page, selectedPath, selectedHash)
     );
     if (!selectedPage) {
@@ -206,7 +207,7 @@ export function TocSidebar({
 
     refocusSelectedPage();
     pendingSelectionRefocusRef.current = false;
-  }, [deck, selectedPath, selectedHash, refocusSelectedPage]);
+  }, [allPages, deck, selectedPath, selectedHash, refocusSelectedPage]);
 
   useEffect(() => {
     return window.viewerApi.onUiFocusRestored(refocusSelectedPage);
@@ -226,8 +227,8 @@ export function TocSidebar({
 
       void (async () => {
         if (button.dataset.pageId) {
-          const page = deck
-            ? flattenDeckPages(deck.pages).find((candidate) => candidate.id === button.dataset.pageId)
+          const page = button.dataset.pageId
+            ? allPages.find((candidate) => candidate.id === button.dataset.pageId)
             : undefined;
           if (page && canNavigate(page)) {
             if (page.kind === "external") {
@@ -302,12 +303,8 @@ export function TocSidebar({
                 selectedHash={selectedHash}
                 expandedPages={expandedPages}
                 selectedPageButtonRef={selectedPageButtonRef}
-                deck={deck}
                 onToggleExpanded={onToggleExpanded}
-                onNavigateTo={async (targetPage, href, openExternal) => {
-                  pendingSelectionRefocusRef.current = true;
-                  await onNavigateTo(targetPage, href, openExternal);
-                }}
+                onNavigateTo={onNavigateTo}
               />
             ))
           ) : (

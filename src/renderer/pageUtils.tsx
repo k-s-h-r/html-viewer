@@ -1,5 +1,8 @@
 import { ExternalLink, FileText, FileWarning, FileX } from "lucide-react";
 import type { Deck, DeckPage } from "../shared/types";
+import { flattenDeckPages, splitHref } from "../shared/deckUtils";
+
+export { flattenDeckPages };
 
 export function canNavigate(page: DeckPage): boolean {
   return page.kind === "page" || page.kind === "external";
@@ -35,20 +38,6 @@ export function clampZoom(value: number): number {
   return Math.min(2, Math.max(0.5, Number(value.toFixed(2))));
 }
 
-export function flattenDeckPages(pages: DeckPage[]): DeckPage[] {
-  const result: DeckPage[] = [];
-  const walk = (page: DeckPage) => {
-    result.push(page);
-    for (const child of page.children) {
-      walk(child);
-    }
-  };
-  for (const page of pages) {
-    walk(page);
-  }
-  return result;
-}
-
 export function visibleNavigablePages(
   pages: DeckPage[],
   expandedPages: Set<string>
@@ -56,7 +45,7 @@ export function visibleNavigablePages(
   const result: DeckPage[] = [];
 
   const walk = (page: DeckPage) => {
-    if (canNavigate(page)) {
+    if (page.kind === "page") {
       result.push(page);
     }
     if (page.children.length > 0 && expandedPages.has(page.id)) {
@@ -70,14 +59,6 @@ export function visibleNavigablePages(
     walk(page);
   }
   return result;
-}
-
-function splitHref(href: string): { pathPart: string; hash: string } {
-  const trimmed = href.trim();
-  const hashIndex = trimmed.indexOf("#");
-  const beforeHash = hashIndex >= 0 ? trimmed.slice(0, hashIndex) : trimmed;
-  const hash = hashIndex >= 0 ? trimmed.slice(hashIndex) : "";
-  return { pathPart: beforeHash, hash };
 }
 
 export function pageMatchesSelection(

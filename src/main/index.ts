@@ -365,9 +365,8 @@ async function loadHref(href: string): Promise<void> {
     return;
   }
 
-  const { pathPart, hash } = splitHref(href);
-  const targetPath = pathPart || page.path;
-  await documentView.webContents.loadURL(localServer.toUrl(`${targetPath}${hash}`));
+  const { hash } = splitHref(href);
+  await documentView.webContents.loadURL(localServer.toUrl(`${page.path}${hash}`));
 }
 
 async function openFolderDialog(): Promise<Deck | null> {

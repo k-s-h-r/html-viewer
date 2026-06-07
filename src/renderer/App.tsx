@@ -10,7 +10,14 @@ import type {
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { formatGlobalFindCounter } from "./searchCounter";
-import { clampZoom, firstNavigablePagePath, canNavigate, pageMatchesSelection, visibleNavigablePages } from "./pageUtils";
+import {
+  clampZoom,
+  firstNavigablePagePath,
+  flattenDeckPages,
+  canNavigate,
+  pageMatchesSelection,
+  visibleNavigablePages
+} from "./pageUtils";
 import { Toolbar } from "./components/Toolbar";
 import { TocSidebar } from "./components/TocSidebar";
 import { ViewerSection } from "./components/ViewerSection";
@@ -45,10 +52,7 @@ export default function App() {
   const findSequenceRef = useRef(0);
 
   const navigablePages = useMemo(
-    () =>
-      visibleNavigablePages(deck?.pages ?? [], expandedPages).filter(
-        (page) => page.kind === "page"
-      ),
+    () => visibleNavigablePages(deck?.pages ?? [], expandedPages),
     [deck, expandedPages]
   );
 
@@ -251,7 +255,11 @@ export default function App() {
 
   const navigateToSearchTarget = useCallback(
     async (pagePath: string, forward = true) => {
-      const page = deck?.pages.find((candidate) => candidate.path === pagePath);
+      const page = deck
+        ? flattenDeckPages(deck.pages).find(
+            (candidate) => candidate.kind === "page" && candidate.path === pagePath
+          )
+        : undefined;
       if (!page) {
         return;
       }
