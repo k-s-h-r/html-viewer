@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,6 +34,23 @@ import { SearchCatalog } from "./search.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+function appIconPath(): string | undefined {
+  const base = path.join(__dirname, "../../assets/icon/icon");
+  const candidates =
+    process.platform === "win32"
+      ? [`${base}.ico`, `${base}.png`]
+      : process.platform === "linux"
+        ? [`${base}.png`]
+        : [`${base}.icns`, `${base}.png`];
+  return candidates.find((candidate) => existsSync(candidate));
+}
+
+function windowIconOptions(): Pick<Electron.BrowserWindowConstructorOptions, "icon"> {
+  const icon = appIconPath();
+  return icon ? { icon } : {};
+}
+
 const RECENT_LIMIT = 8;
 const startupFolder = process.env.HTML_VIEWER_OPEN_FOLDER;
 const autoQuitMs = Number(process.env.HTML_VIEWER_AUTO_QUIT_MS ?? 0);
@@ -392,6 +410,7 @@ async function createMainWindow(): Promise<void> {
     minWidth: 720,
     minHeight: 640,
     title: "HTML仕様書ビューワー",
+    ...windowIconOptions(),
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
       contextIsolation: true,
@@ -604,6 +623,7 @@ async function openEditorWindow(pagePath: string): Promise<void> {
     minWidth: 980,
     minHeight: 640,
     title: `HTML仕様書エディター - ${initialDocument.name}`,
+    ...windowIconOptions(),
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
       contextIsolation: true,

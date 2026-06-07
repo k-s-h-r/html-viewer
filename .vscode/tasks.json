@@ -1,0 +1,63 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build:electron",
+      "type": "shell",
+      "command": "tsc -p tsconfig.electron.json && tsc -p tsconfig.preload.json",
+      "group": "build",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "build:app",
+      "type": "npm",
+      "script": "build",
+      "group": "build",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "vite:dev",
+      "type": "shell",
+      "command": "vite --host 127.0.0.1",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "127\\.0\\.0\\.1:5173"
+        }
+      },
+      "presentation": {
+        "reveal": "never",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "tsc:electron:watch",
+      "type": "shell",
+      "command": "concurrently -k \"tsc -w -p tsconfig.electron.json\" \"tsc -w -p tsconfig.preload.json\"",
+      "isBackground": true,
+      "problemMatcher": "$tsc-watch",
+      "presentation": {
+        "reveal": "never",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "dev:debug-prep",
+      "dependsOn": ["build:electron", "vite:dev", "tsc:electron:watch"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    }
+  ]
+}
