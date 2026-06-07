@@ -7,6 +7,17 @@ interface History {
   index: number
 }
 
+export function pushDocumentHistory(
+  prev: History,
+  cleanHtml: string
+): History {
+  if (prev.index >= 0 && prev.stack[prev.index] === cleanHtml) return prev
+  const base = prev.stack.slice(0, prev.index + 1)
+  base.push(cleanHtml)
+  const capped = base.slice(-HISTORY_LIMIT)
+  return { stack: capped, index: capped.length - 1 }
+}
+
 export function useDocumentHistory() {
   const [history, setHistory] = useState<History>({ stack: [], index: -1 })
   const [savedHtml, setSavedHtml] = useState<string | null>(null)
@@ -23,12 +34,7 @@ export function useDocumentHistory() {
   }, [])
 
   const pushHistory = useCallback((cleanHtml: string) => {
-    setHistory((prev) => {
-      const base = prev.stack.slice(0, prev.index + 1)
-      base.push(cleanHtml)
-      const capped = base.slice(-HISTORY_LIMIT)
-      return { stack: capped, index: capped.length - 1 }
-    })
+    setHistory((prev) => pushDocumentHistory(prev, cleanHtml))
   }, [])
 
   const replaceCurrentHistory = useCallback((html: string) => {

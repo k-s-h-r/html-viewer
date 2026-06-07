@@ -67,6 +67,7 @@ function collectCollapsibleOutlineKeys(
 export function App() {
   const canvasRef = useRef<CanvasHandle>(null)
   const allowCloseRef = useRef(false)
+  const historyRestoreInProgressRef = useRef(false)
   const [canvasHandle, setCanvasHandle] = useState<CanvasHandle | null>(null)
   const [mode, setMode] = useState<EditorMode>("edit")
   const [selection, setSelection] = useState<SelectionInfo | null>(null)
@@ -193,6 +194,7 @@ export function App() {
 
   const handleCommit = useCallback(
     (cleanHtml: string) => {
+      if (historyRestoreInProgressRef.current) return
       pushHistory(cleanHtml)
     },
     [pushHistory]
@@ -446,13 +448,33 @@ export function App() {
     sourceDirty,
   ])
 
+  const finishHistoryRestore = useCallback(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const normalized = canvasRef.current?.getCleanHtml()
+        if (normalized) replaceCurrentHistory(normalized)
+        historyRestoreInProgressRef.current = false
+      })
+    })
+  }, [replaceCurrentHistory])
+
   const handleUndo = useCallback(() => {
-    undo((html) => canvasRef.current?.loadHtml(html))
-  }, [undo])
+    if (!canUndo) return
+    historyRestoreInProgressRef.current = true
+    undo((html) => {
+      canvasRef.current?.loadHtml(html)
+    })
+    finishHistoryRestore()
+  }, [canUndo, finishHistoryRestore, undo])
 
   const handleRedo = useCallback(() => {
-    redo((html) => canvasRef.current?.loadHtml(html))
-  }, [redo])
+    if (!canRedo) return
+    historyRestoreInProgressRef.current = true
+    redo((html) => {
+      canvasRef.current?.loadHtml(html)
+    })
+    finishHistoryRestore()
+  }, [canRedo, finishHistoryRestore, redo])
 
   const handleModeChange = useCallback(
     (next: EditorMode) => {
