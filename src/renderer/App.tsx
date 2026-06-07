@@ -163,7 +163,12 @@ export default function App() {
   }, [deck]);
 
   const navigateTo = useCallback(
-    async (page: DeckPage, href = page.href, refindForward?: boolean) => {
+    async (
+      page: DeckPage,
+      href = page.href,
+      refindForward?: boolean,
+      retainUiFocus?: boolean
+    ) => {
       if (!canNavigate(page)) {
         return;
       }
@@ -173,7 +178,10 @@ export default function App() {
         return;
       }
 
-      await window.viewerApi.navigate(href);
+      await window.viewerApi.navigate(
+        href,
+        retainUiFocus ? { retainUiFocus: true } : undefined
+      );
       if (refindForward !== undefined && submittedQuery.trim()) {
         beginFind(submittedQuery, refindForward);
       }
@@ -188,7 +196,7 @@ export default function App() {
   }, []);
 
   const navigateByOffset = useCallback(
-    (offset: number) => {
+    (offset: number, retainUiFocus?: boolean) => {
       if (!deck || navigablePages.length === 0) {
         return;
       }
@@ -199,7 +207,12 @@ export default function App() {
         Math.max(0, currentIndex + offset)
       );
       const page = navigablePages[nextIndex] ?? navigablePages[0];
-      void navigateTo(page, page.href, submittedQuery.trim() ? true : undefined);
+      void navigateTo(
+        page,
+        page.href,
+        submittedQuery.trim() ? true : undefined,
+        retainUiFocus
+      );
     },
     [deck, navigablePages, navigateTo, selectedPath, submittedQuery]
   );
@@ -463,9 +476,10 @@ export default function App() {
               selectedHash={selectedHash}
               expandedPages={expandedPages}
               onToggleExpanded={toggleExpanded}
-              onNavigateTo={(page, href) =>
-                void navigateTo(page, href ?? page.href, refindForward)
+              onNavigateTo={(page, href, retainUiFocus) =>
+                navigateTo(page, href ?? page.href, refindForward, retainUiFocus)
               }
+              onNavigateByOffset={(offset) => navigateByOffset(offset, true)}
               onClose={() => setSidebarVisible(false)}
             />
           ) : null}

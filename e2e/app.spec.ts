@@ -234,6 +234,34 @@ test.describe("HTML Viewer", () => {
     }
   });
 
+  test("sidebar arrow keys navigate pages while keeping sidebar focus", async () => {
+    const { electronApp, window, userDataDir } = await launchApp();
+
+    try {
+      await waitForDocumentViewUrl(electronApp, /intro\.html/i);
+
+      const setupButton = window.getByRole("button", { name: /セットアップ/ });
+      await setupButton.click();
+      await waitForDocumentViewUrl(electronApp, /setup\.html/i);
+
+      const selectedPageButton = window.getByTestId("selected-page-button");
+      await expect(selectedPageButton).toBeFocused();
+
+      await window.keyboard.press("ArrowDown");
+      await waitForDocumentViewUrl(electronApp, /search\.html/i);
+      await expect(selectedPageButton).toBeFocused();
+      await expectUiIntact(window, electronApp);
+
+      await window.keyboard.press("ArrowUp");
+      await waitForDocumentViewUrl(electronApp, /setup\.html/i);
+      await expect(selectedPageButton).toBeFocused();
+      await expectUiIntact(window, electronApp);
+    } finally {
+      await electronApp.close();
+      await rm(userDataDir, { recursive: true, force: true });
+    }
+  });
+
   test("toolbar navigation and sidebar toggle keep the viewer visible", async () => {
     const { electronApp, window, userDataDir } = await launchApp();
 

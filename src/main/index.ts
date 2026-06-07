@@ -15,6 +15,7 @@ import type {
   FindRequest,
   FindResult,
   InputPoint,
+  NavigateOptions,
   NavigationState,
   RecentFolder,
   ViewBounds
@@ -37,6 +38,7 @@ let searchCatalog: SearchCatalog | null = null;
 let recentFolders: RecentFolder[] = [];
 let zoomFactor = 1;
 let isStoppingForQuit = false;
+let pendingRetainUiFocus = false;
 
 function recentFoldersPath(): string {
   return path.join(app.getPath("userData"), "recent-folders.json");
@@ -189,6 +191,14 @@ function clickRendererPoint(point: InputPoint): void {
 }
 
 async function focusSearchInRenderer(clickPoint?: InputPoint): Promise<void> {
+  focusRendererWebContents();
+  if (clickPoint) {
+    clickRendererPoint(clickPoint);
+  }
+  sendToRenderer("viewer:focus-search", null);
+}
+
+function focusRendererWebContents(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return;
   }
@@ -198,11 +208,20 @@ async function focusSearchInRenderer(clickPoint?: InputPoint): Promise<void> {
   }
   mainWindow.focus();
   mainWindow.webContents.focus();
+}
 
-  if (clickPoint) {
-    clickRendererPoint(clickPoint);
+function restoreRendererFocusAfterNavigation(): void {
+  focusRendererWebContents();
+  sendToRenderer("viewer:ui-focus-restored", null);
+}
+
+function finishRetainUiFocus(): void {
+  if (!pendingRetainUiFocus) {
+    return;
   }
-  sendToRenderer("viewer:focus-search", null);
+  pendingRetainUiFocus = false;
+  restoreRendererFocusAfterNavigation();
+  setTimeout(restoreRendererFocusAfterNavigation, 0);
 }
 
 function registerDocumentFocusSearchShortcut(contents: Electron.WebContents): void {
@@ -255,6 +274,14 @@ function createDocumentView(): WebContentsView {
       finalUpdate: result.finalUpdate
     };
     sendToRenderer("viewer:find-result", payload);
+  });
+
+  view.webContents.on("did-finish-load", () => {
+    finishRetainUiFocus();
+  });
+
+  view.webContents.on("did-fail-load", () => {
+    pendingRetainUiFocus = false;
   });
 
   registerDocumentFocusSearchShortcut(view.webContents);
@@ -314,7 +341,7 @@ function firstNavigablePage(deck: Deck): string | null {
   return deck.pages.find((page) => page.kind === "page")?.href ?? null;
 }
 
-async function loadHref(href: string): Promise<void> {
+async function loadHref(href: string, options?: NavigateOptions): Promise<void> {
   if (!documentView || !localServer || !currentDeck) {
     return;
   }
@@ -334,7 +361,9 @@ async function loadHref(href: string): Promise<void> {
     return;
   }
 
+  pendingRetainUiFocus = options?.retainUiFocus ?? false;
   await documentView.webContents.loadURL(localServer.toUrl(`${page.path}${parsed.hash}`));
+  finishRetainUiFocus();
 }
 
 async function openFolderDialog(): Promise<Deck | null> {
@@ -393,7 +422,9 @@ ipcMain.handle("folder:open", () => openFolderDialog());
 ipcMain.handle("folder:open-recent", (_event, folderPath: string) => openFolderPath(folderPath));
 ipcMain.handle("folder:get-recent", () => recentFolders);
 ipcMain.handle("deck:get-current", () => currentDeck);
-ipcMain.handle("viewer:navigate", (_event, href: string) => loadHref(href));
+ipcMain.handle("viewer:navigate", (_event, href: string, options?: NavigateOptions) =>
+  loadHref(href, options)
+);
 ipcMain.handle("viewer:open-external", (_event, href: string) => shell.openExternal(href));
 ipcMain.handle("viewer:set-bounds", (_event, bounds: ViewBounds) => setViewBounds(bounds));
 ipcMain.handle("viewer:set-zoom-factor", (_event, factor: number) => {
