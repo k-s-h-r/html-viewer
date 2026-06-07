@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { load } from "cheerio";
 import type { Deck, PageSearchResult, SearchHit, SearchResult } from "../shared/types.js";
-import { localPathFromPage } from "./deck.js";
+import { localPathFromPage, flattenDeckPages } from "./deck.js";
 
 interface IndexedPage {
   id: string;
@@ -87,16 +87,18 @@ export class SearchCatalog {
 
   static async create(rootDir: string, deck: Deck): Promise<SearchCatalog> {
     const pages: IndexedPage[] = [];
+    const seenPaths = new Set<string>();
 
-    for (const page of deck.pages) {
+    for (const page of flattenDeckPages(deck.pages)) {
       const localPath = localPathFromPage(rootDir, page);
-      if (!localPath) {
+      if (!localPath || seenPaths.has(page.path)) {
         continue;
       }
+      seenPaths.add(page.path);
 
       const html = await readFile(localPath, "utf8");
       pages.push({
-        id: page.id,
+        id: page.path,
         title: page.title,
         path: page.path,
         text: htmlToText(html)

@@ -10,7 +10,7 @@ import type {
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { formatGlobalFindCounter } from "./searchCounter";
-import { clampZoom, findPageIndex, firstNavigablePagePath, canNavigate } from "./pageUtils";
+import { clampZoom, firstNavigablePagePath, canNavigate, pageMatchesSelection, visibleNavigablePages } from "./pageUtils";
 import { Toolbar } from "./components/Toolbar";
 import { TocSidebar } from "./components/TocSidebar";
 import { ViewerSection } from "./components/ViewerSection";
@@ -45,14 +45,19 @@ export default function App() {
   const findSequenceRef = useRef(0);
 
   const navigablePages = useMemo(
-    () => deck?.pages.filter((page) => page.kind === "page") ?? [],
-    [deck]
+    () =>
+      visibleNavigablePages(deck?.pages ?? [], expandedPages).filter(
+        (page) => page.kind === "page"
+      ),
+    [deck, expandedPages]
   );
 
   const selectedPageNumber = useMemo(() => {
-    const index = findPageIndex(deck, selectedPath);
+    const index = navigablePages.findIndex((page) =>
+      pageMatchesSelection(page, selectedPath, selectedHash)
+    );
     return index >= 0 ? index + 1 : 0;
-  }, [deck, selectedPath]);
+  }, [navigablePages, selectedPath, selectedHash]);
 
   const applyDeck = useCallback((nextDeck: Deck | null) => {
     setDeck(nextDeck);
@@ -166,22 +171,21 @@ export default function App() {
     async (
       page: DeckPage,
       href = page.href,
-      refindForward?: boolean,
-      retainUiFocus?: boolean
+      openExternal = false,
+      refindForward?: boolean
     ) => {
       if (!canNavigate(page)) {
         return;
       }
 
       if (page.kind === "external") {
-        await window.viewerApi.openExternal(page.href);
+        if (openExternal) {
+          await window.viewerApi.openExternal(page.href);
+        }
         return;
       }
 
-      await window.viewerApi.navigate(
-        href,
-        retainUiFocus ? { retainUiFocus: true } : undefined
-      );
+      await window.viewerApi.navigate(href);
       if (refindForward !== undefined && submittedQuery.trim()) {
         beginFind(submittedQuery, refindForward);
       }
@@ -196,12 +200,14 @@ export default function App() {
   }, []);
 
   const navigateByOffset = useCallback(
-    (offset: number, retainUiFocus?: boolean) => {
+    (offset: number) => {
       if (!deck || navigablePages.length === 0) {
         return;
       }
 
-      const currentIndex = navigablePages.findIndex((page) => page.path === selectedPath);
+      const currentIndex = navigablePages.findIndex((page) =>
+        pageMatchesSelection(page, selectedPath, selectedHash)
+      );
       const nextIndex = Math.min(
         navigablePages.length - 1,
         Math.max(0, currentIndex + offset)
@@ -210,11 +216,11 @@ export default function App() {
       void navigateTo(
         page,
         page.href,
-        submittedQuery.trim() ? true : undefined,
-        retainUiFocus
+        false,
+        submittedQuery.trim() ? true : undefined
       );
     },
-    [deck, navigablePages, navigateTo, selectedPath, submittedQuery]
+    [deck, navigablePages, navigateTo, selectedPath, selectedHash, submittedQuery]
   );
 
   const clearSearch = useCallback(async () => {
@@ -254,7 +260,7 @@ export default function App() {
         beginFind(submittedQuery, forward);
         await ensureSearchInputFocused();
       } else {
-        await navigateTo(page, page.href, forward);
+        await navigateTo(page, page.href, false, forward);
         await ensureSearchInputFocused();
       }
     },
@@ -488,10 +494,10 @@ export default function App() {
               selectedHash={selectedHash}
               expandedPages={expandedPages}
               onToggleExpanded={toggleExpanded}
-              onNavigateTo={(page, href, retainUiFocus) =>
-                navigateTo(page, href ?? page.href, refindForward, retainUiFocus)
+              onNavigateTo={(page, href, openExternal) =>
+                navigateTo(page, href ?? page.href, openExternal, refindForward)
               }
-              onNavigateByOffset={(offset) => navigateByOffset(offset, true)}
+              onNavigateByOffset={navigateByOffset}
               onClose={() => setSidebarVisible(false)}
             />
           ) : null}

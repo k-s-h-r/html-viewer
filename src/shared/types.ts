@@ -14,6 +14,8 @@ export interface DeckPage {
   href: string;
   kind: LinkKind;
   exists: boolean;
+  tocNum?: string;
+  children: DeckPage[];
   anchors: DeckAnchor[];
   reason?: string;
 }
@@ -88,16 +90,12 @@ export interface RecentFolder {
   name: string;
 }
 
-export interface NavigateOptions {
-  retainUiFocus?: boolean;
-}
-
 export interface ViewerApi {
   openFolder(): Promise<Deck | null>;
   openRecentFolder(path: string): Promise<Deck | null>;
   getRecentFolders(): Promise<RecentFolder[]>;
   getCurrentDeck(): Promise<Deck | null>;
-  navigate(href: string, options?: NavigateOptions): Promise<void>;
+  navigate(href: string): Promise<void>;
   openExternal(href: string): Promise<void>;
   setViewBounds(bounds: ViewBounds): Promise<void>;
   setZoomFactor(factor: number): Promise<void>;
