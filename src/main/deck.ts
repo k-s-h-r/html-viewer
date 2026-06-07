@@ -12,6 +12,18 @@ interface TocLink {
   tocNum: string | null;
 }
 
+interface MenuConfigPage {
+  href: string;
+  title?: string;
+  num?: string;
+}
+
+interface MenuConfig {
+  pages: MenuConfigPage[];
+}
+
+const MENU_CONFIG_FILENAME = "menu.json";
+
 function toPosix(relativePath: string): string {
   return relativePath.split(path.sep).join("/");
 }
@@ -86,6 +98,35 @@ function extractTocLinks(indexHtml: string): TocLink[] {
       };
     })
     .filter((link) => link.href.length > 0);
+}
+
+function parseMenuConfig(content: string): TocLink[] {
+  const config = JSON.parse(content) as MenuConfig;
+  if (!Array.isArray(config.pages)) {
+    return [];
+  }
+
+  return config.pages
+    .filter((page): page is MenuConfigPage => typeof page?.href === "string" && page.href.trim().length > 0)
+    .map((page) => ({
+      href: page.href.trim(),
+      text: page.title?.trim() ?? "",
+      tocNum: page.num?.trim() ? page.num.trim() : null
+    }));
+}
+
+async function loadMenuConfigLinks(rootDir: string): Promise<TocLink[] | null> {
+  const menuPath = path.join(rootDir, MENU_CONFIG_FILENAME);
+  if (!(await fileExists(menuPath))) {
+    return null;
+  }
+
+  try {
+    const links = parseMenuConfig(await readFile(menuPath, "utf8"));
+    return links.length > 0 ? links : null;
+  } catch {
+    return null;
+  }
 }
 
 function sortNatural(values: string[]): string[] {
@@ -257,20 +298,11 @@ function nestSubPages(pages: DeckPage[]): DeckPage[] {
   return roots;
 }
 
-export async function buildDeck(rootDir: string): Promise<Deck> {
-  const rootName = path.basename(rootDir);
-  const indexPath = path.join(rootDir, "index.html");
-  const hasIndex = await fileExists(indexPath);
-
-  if (!hasIndex) {
-    return buildFallbackDeck(rootDir, rootName);
-  }
-
-  const links = extractTocLinks(await readHtml(indexPath));
-  if (links.length === 0) {
-    return buildFallbackDeck(rootDir, rootName);
-  }
-
+async function buildDeckFromTocLinks(
+  rootDir: string,
+  rootName: string,
+  links: TocLink[]
+): Promise<Deck> {
   const pages = new Map<string, DeckPage>();
   const orderedPages: DeckPage[] = [];
 
@@ -320,6 +352,29 @@ export async function buildDeck(rootDir: string): Promise<Deck> {
     pages: nestSubPages(orderedPages),
     hasToc: true
   };
+}
+
+export async function buildDeck(rootDir: string): Promise<Deck> {
+  const rootName = path.basename(rootDir);
+
+  const menuLinks = await loadMenuConfigLinks(rootDir);
+  if (menuLinks) {
+    return buildDeckFromTocLinks(rootDir, rootName, menuLinks);
+  }
+
+  const indexPath = path.join(rootDir, "index.html");
+  const hasIndex = await fileExists(indexPath);
+
+  if (!hasIndex) {
+    return buildFallbackDeck(rootDir, rootName);
+  }
+
+  const links = extractTocLinks(await readHtml(indexPath));
+  if (links.length === 0) {
+    return buildFallbackDeck(rootDir, rootName);
+  }
+
+  return buildDeckFromTocLinks(rootDir, rootName, links);
 }
 
 export function localPathFromPage(rootDir: string, page: DeckPage): string | null {

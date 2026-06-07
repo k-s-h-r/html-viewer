@@ -1,0 +1,9 @@
+{
+  "pages": [
+    { "href": "chapters/search.html", "title": "検索（menu.json 1番目）", "num": "1" },
+    { "href": "intro.html", "title": "概要（menu.json 2番目）", "num": "2" },
+    { "href": "chapters/setup.html", "title": "セットアップ（menu.json 3番目）", "num": "3" },
+    { "href": "chapters/setup.html#folder", "title": "フォルダ構成", "num": "3-1" },
+    { "href": "chapters/setup.html#serving", "title": "ローカル配信", "num": "3-2" }
+  ]
+}
