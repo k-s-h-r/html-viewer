@@ -13,6 +13,7 @@ import {
   PanelRight,
   Copy,
   PencilLine,
+  RefreshCw,
   Trash2,
   Plus,
   Search,
@@ -54,6 +55,7 @@ type ToolbarProps = {
   onEditModeToggle: () => void;
   onOpenFolder: () => void;
   onOpenRecentFolder: (folderPath: string) => void;
+  onReload: () => void;
   onOpenEditor: () => void;
   onDuplicatePage: () => void;
   onDeletePage: () => void;
@@ -86,6 +88,7 @@ export function Toolbar({
   onEditModeToggle,
   onOpenFolder,
   onOpenRecentFolder,
+  onReload,
   onOpenEditor,
   onDuplicatePage,
   onDeletePage,
@@ -138,6 +141,23 @@ export function Toolbar({
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="outline"
+                size="icon-sm"
+                disabled={!deck}
+                aria-label="リロード"
+                data-testid="reload-button"
+                onClick={onReload}
+              >
+                <RefreshCw />
+              </Button>
+            }
+          />
+          <TooltipContent side="bottom">リロード (Ctrl+R)</TooltipContent>
+        </Tooltip>
       </div>
 
       <Separator orientation="vertical" className="mx-1 h-6 my-auto" />

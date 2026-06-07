@@ -119,6 +119,7 @@ export interface ViewerApi {
   openRecentFolder(path: string): Promise<Deck | null>;
   getRecentFolders(): Promise<RecentFolder[]>;
   getCurrentDeck(): Promise<Deck | null>;
+  reload(): Promise<Deck | null>;
   navigate(href: string): Promise<void>;
   openExternal(href: string): Promise<void>;
   setViewBounds(bounds: ViewBounds): Promise<void>;
@@ -138,6 +139,7 @@ export interface ViewerApi {
   focusDocument(): Promise<void>;
   focusSidebar(): Promise<void>;
   onDeckChanged(callback: (deck: Deck) => void): () => void;
+  onReloadRequested(callback: () => void): () => void;
   onNavigationChanged(callback: (state: NavigationState) => void): () => void;
   onFindResult(callback: (result: FindResult) => void): () => void;
   onZoomChanged(callback: (factor: number) => void): () => void;

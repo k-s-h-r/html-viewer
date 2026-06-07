@@ -150,7 +150,11 @@ function buildAppMenu(): void {
           click: () => focusSearchInRenderer()
         },
         { type: "separator" },
-        { role: "reload" },
+        {
+          label: "リロード",
+          accelerator: "CmdOrCtrl+R",
+          click: () => sendToRenderer("viewer:reload-requested", null)
+        },
         { role: "toggleDevTools" },
         { type: "separator" },
         {
@@ -635,12 +639,27 @@ function requireCurrentDeckRoot(): string {
   return currentDeck.rootDir;
 }
 
-async function refreshCurrentDeck(): Promise<Deck> {
+async function rebuildCurrentDeck(notify = true): Promise<Deck> {
   const rootDir = requireCurrentDeckRoot();
   const deck = await buildDeck(rootDir);
   searchCatalog = await SearchCatalog.create(rootDir, deck);
   currentDeck = deck;
-  sendToRenderer("deck:changed", deck);
+  if (notify) {
+    sendToRenderer("deck:changed", deck);
+  }
+  return deck;
+}
+
+async function refreshCurrentDeck(): Promise<Deck> {
+  return rebuildCurrentDeck(true);
+}
+
+async function reloadViewer(): Promise<Deck | null> {
+  if (!currentDeck) {
+    return null;
+  }
+  const deck = await rebuildCurrentDeck(false);
+  await reloadDocumentView();
   return deck;
 }
 
@@ -714,6 +733,7 @@ ipcMain.handle("deck:delete-page", async (_event, options: DeletePageOptions) =>
   await refreshCurrentDeck();
   return result;
 });
+ipcMain.handle("viewer:reload", () => reloadViewer());
 ipcMain.handle("viewer:navigate", (_event, href: string) => loadHref(href));
 ipcMain.handle("viewer:open-external", (_event, href: string) => shell.openExternal(href));
 ipcMain.handle("viewer:set-bounds", (_event, bounds: ViewBounds) => setViewBounds(bounds));

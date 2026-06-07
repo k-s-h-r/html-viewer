@@ -342,6 +342,44 @@ export default function App() {
     [findResult, navigateToSearchTarget, searchResult.pages, selectedPath, stepFind, submittedQuery]
   );
 
+  const handleReload = useCallback(async () => {
+    if (!deck) {
+      return;
+    }
+
+    const query = submittedQuery.trim();
+    const activeMatchCase = matchCase;
+
+    try {
+      setError(null);
+      const nextDeck = await window.viewerApi.reload();
+      if (!nextDeck) {
+        return;
+      }
+
+      setDeck(nextDeck);
+      setSelectedPath((currentPath) => {
+        if (
+          currentPath &&
+          flattenDeckPages(nextDeck.pages).some(
+            (page) => page.kind === "page" && page.path === currentPath
+          )
+        ) {
+          return currentPath;
+        }
+        return firstNavigablePagePath(nextDeck);
+      });
+
+      if (query) {
+        const result = await window.viewerApi.search(query, activeMatchCase);
+        setSearchResult(result);
+        beginFind(query, true);
+      }
+    } catch (reloadError) {
+      setError(reloadError instanceof Error ? reloadError.message : String(reloadError));
+    }
+  }, [beginFind, deck, matchCase, submittedQuery]);
+
   useEffect(() => {
     void window.viewerApi.getRecentFolders().then(setRecentFolders);
     void window.viewerApi.getCurrentDeck().then((deck) => {
@@ -365,6 +403,9 @@ export default function App() {
       resetSidebarLayout();
       setSidebarLayoutVersion((version) => version + 1);
     });
+    const cleanupReloadRequested = window.viewerApi.onReloadRequested(() => {
+      void handleReload();
+    });
 
     return () => {
       cleanupDeck();
@@ -373,8 +414,9 @@ export default function App() {
       cleanupZoom();
       cleanupFocusSearch();
       cleanupSidebarLayoutReset();
+      cleanupReloadRequested();
     };
-  }, [applyDeck, focusSearchInput, updateRecentFolders]);
+  }, [applyDeck, focusSearchInput, handleReload, updateRecentFolders]);
 
   useEffect(() => {
     return window.viewerApi.onDocumentEscape(() => {
@@ -690,6 +732,7 @@ export default function App() {
             onEditModeToggle={() => setEditModeEnabled(!editMode)}
             onOpenFolder={() => void openFolder()}
             onOpenRecentFolder={(folderPath) => void openRecentFolder(folderPath)}
+            onReload={() => void handleReload()}
             onOpenEditor={() => void openEditor()}
             onDuplicatePage={() => void handleDuplicatePage()}
             onDeletePage={() => void handleDeletePage()}
