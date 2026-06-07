@@ -153,4 +153,5 @@ export interface EditorApi {
   getInitialDocument(): Promise<EditorDocument | null>;
   savePage(html: string): Promise<void>;
   close(): Promise<void>;
+  onCloseRequested(callback: () => void): () => void;
 }
