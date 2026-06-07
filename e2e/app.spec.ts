@@ -112,6 +112,50 @@ async function waitForDocumentViewUrl(
     .toMatch(pattern);
 }
 
+async function isDocumentViewFocused(electronApp: ElectronApplication): Promise<boolean> {
+  return electronApp.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (!win) {
+      return false;
+    }
+
+    for (const child of win.contentView.children) {
+      if (!("webContents" in child) || typeof child.webContents?.getURL !== "function") {
+        continue;
+      }
+      if (/127\.0\.0\.1/.test(child.webContents.getURL())) {
+        return child.webContents.isFocused();
+      }
+    }
+
+    return false;
+  });
+}
+
+async function pressDocumentViewKey(
+  electronApp: ElectronApplication,
+  keyCode: string
+): Promise<void> {
+  await electronApp.evaluate(({ BrowserWindow }, code) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (!win) {
+      return;
+    }
+
+    for (const child of win.contentView.children) {
+      if (!("webContents" in child) || typeof child.webContents?.getURL !== "function") {
+        continue;
+      }
+      if (/127\.0\.0\.1/.test(child.webContents.getURL())) {
+        child.webContents.focus();
+        child.webContents.sendInputEvent({ type: "keyDown", keyCode: code });
+        child.webContents.sendInputEvent({ type: "keyUp", keyCode: code });
+        return;
+      }
+    }
+  }, keyCode);
+}
+
 async function focusDocumentView(electronApp: ElectronApplication): Promise<void> {
   await electronApp.evaluate(({ BrowserWindow }) => {
     const win = BrowserWindow.getAllWindows()[0];
@@ -227,6 +271,64 @@ test.describe("HTML Viewer", () => {
 
       await expect(window.getByTestId("page-row")).toHaveCount(6);
       await waitForDocumentViewUrl(electronApp, /intro\.html/i);
+      await expectUiIntact(window, electronApp);
+    } finally {
+      await electronApp.close();
+      await rm(userDataDir, { recursive: true, force: true });
+    }
+  });
+
+  test("sidebar Enter and document Escape move focus between panes", async () => {
+    const { electronApp, window, userDataDir } = await launchApp();
+
+    try {
+      await waitForDocumentViewUrl(electronApp, /intro\.html/i);
+
+      const selectedPageButton = window.getByTestId("selected-page-button");
+      await selectedPageButton.focus();
+      await expect(selectedPageButton).toBeFocused();
+
+      await window.keyboard.press("Enter");
+      await expect
+        .poll(async () => isDocumentViewFocused(electronApp), { timeout: 5_000 })
+        .toBe(true);
+
+      await pressDocumentViewKey(electronApp, "Escape");
+      await expect
+        .poll(async () => isDocumentViewFocused(electronApp), { timeout: 5_000 })
+        .toBe(false);
+      await expect(selectedPageButton).toBeFocused();
+
+      await window.keyboard.press("ArrowDown");
+      await waitForDocumentViewUrl(electronApp, /setup\.html/i);
+      await expectUiIntact(window, electronApp);
+    } finally {
+      await electronApp.close();
+      await rm(userDataDir, { recursive: true, force: true });
+    }
+  });
+
+  test("sidebar arrow keys navigate pages while keeping sidebar focus", async () => {
+    const { electronApp, window, userDataDir } = await launchApp();
+
+    try {
+      await waitForDocumentViewUrl(electronApp, /intro\.html/i);
+
+      const setupButton = window.getByRole("button", { name: /セットアップ/ });
+      await setupButton.click();
+      await waitForDocumentViewUrl(electronApp, /setup\.html/i);
+
+      const selectedPageButton = window.getByTestId("selected-page-button");
+      await expect(selectedPageButton).toBeFocused();
+
+      await window.keyboard.press("ArrowDown");
+      await waitForDocumentViewUrl(electronApp, /search\.html/i);
+      await expect(selectedPageButton).toBeFocused();
+      await expectUiIntact(window, electronApp);
+
+      await window.keyboard.press("ArrowUp");
+      await waitForDocumentViewUrl(electronApp, /setup\.html/i);
+      await expect(selectedPageButton).toBeFocused();
       await expectUiIntact(window, electronApp);
     } finally {
       await electronApp.close();

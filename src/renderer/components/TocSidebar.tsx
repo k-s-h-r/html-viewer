@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { ChevronRight, PanelLeftClose } from "lucide-react";
 import type { Deck, DeckPage } from "../../shared/types";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,8 @@ type TocSidebarProps = {
   selectedHash: string | null;
   expandedPages: Set<string>;
   onToggleExpanded: (pageId: string) => void;
-  onNavigateTo: (page: DeckPage, href?: string) => void;
+  onNavigateTo: (page: DeckPage, href?: string, retainUiFocus?: boolean) => Promise<void>;
+  onNavigateByOffset: (offset: number) => void;
   onClose: () => void;
 };
 
@@ -28,10 +30,90 @@ export function TocSidebar({
   expandedPages,
   onToggleExpanded,
   onNavigateTo,
+  onNavigateByOffset,
   onClose
 }: TocSidebarProps) {
+  const sidebarRef = useRef<HTMLElement>(null);
+  const selectedPageButtonRef = useRef<HTMLButtonElement | null>(null);
+  const sidebarFocusedRef = useRef(false);
+  const pendingRefocusRef = useRef(false);
+
+  const refocusSelectedPage = useCallback(() => {
+    const button = selectedPageButtonRef.current;
+    if (!button) {
+      return;
+    }
+    button.focus({ preventScroll: true });
+    button.scrollIntoView({ block: "nearest" });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!pendingRefocusRef.current) {
+      return;
+    }
+    refocusSelectedPage();
+  }, [selectedPath, refocusSelectedPage]);
+
+  useEffect(() => {
+    return window.viewerApi.onUiFocusRestored(() => {
+      pendingRefocusRef.current = false;
+      sidebarFocusedRef.current = true;
+      refocusSelectedPage();
+    });
+  }, [refocusSelectedPage]);
+
+  const handleSidebarKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Enter") {
+      const button =
+        event.target instanceof HTMLElement
+          ? event.target.closest<HTMLButtonElement>("[data-reading-target]")
+          : null;
+      if (!button || button.disabled) {
+        return;
+      }
+      event.preventDefault();
+      sidebarFocusedRef.current = false;
+      pendingRefocusRef.current = false;
+
+      void (async () => {
+        if (button.dataset.pageId) {
+          const page = deck?.pages.find((candidate) => candidate.id === button.dataset.pageId);
+          if (page && canNavigate(page) && button.dataset.testid !== "selected-page-button") {
+            await onNavigateTo(page, page.href, false);
+          }
+        } else {
+          button.click();
+          await new Promise((resolve) => window.setTimeout(resolve, 0));
+        }
+        await window.viewerApi.focusDocument();
+      })();
+      return;
+    }
+
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+      return;
+    }
+    event.preventDefault();
+    pendingRefocusRef.current = true;
+    onNavigateByOffset(event.key === "ArrowDown" ? 1 : -1);
+  };
+
   return (
-    <aside className="flex w-72 shrink-0 flex-col overflow-hidden border bg-card">
+    <aside
+      ref={sidebarRef}
+      data-testid="toc-sidebar"
+      className="flex w-72 shrink-0 flex-col overflow-hidden border bg-card"
+      onFocusCapture={() => {
+        sidebarFocusedRef.current = true;
+      }}
+      onBlurCapture={(event) => {
+        if (sidebarRef.current?.contains(event.relatedTarget as Node | null)) {
+          return;
+        }
+        sidebarFocusedRef.current = false;
+      }}
+      onKeyDown={handleSidebarKeyDown}
+    >
       <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
         <span className="truncate text-sm font-semibold">
           {deck?.rootName ?? "仕様書未選択"}
@@ -72,7 +154,18 @@ export function TocSidebar({
                     <button
                       type="button"
                       disabled={disabled}
-                      onClick={() => void onNavigateTo(page, page.href)}
+                      ref={(element) => {
+                        if (isSelected) {
+                          selectedPageButtonRef.current = element;
+                        }
+                      }}
+                      data-testid={isSelected ? "selected-page-button" : undefined}
+                      data-page-id={page.id}
+                      data-reading-target=""
+                      onClick={() => {
+                        pendingRefocusRef.current = true;
+                        void onNavigateTo(page, page.href, true);
+                      }}
                       className={cn(
                         "flex min-h-[52px] w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors",
                         page.anchors.length > 0 ? "pr-9" : "pr-2",
@@ -122,7 +215,8 @@ export function TocSidebar({
                           <button
                             key={anchor.id}
                             type="button"
-                            onClick={() => void onNavigateTo(page, anchor.href)}
+                            data-reading-target=""
+                            onClick={() => void onNavigateTo(page, anchor.href, false)}
                             className={cn(
                               "truncate rounded-md px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-accent",
                               anchorSelected

@@ -4,6 +4,7 @@ import type {
   FindRequest,
   FindResult,
   InputPoint,
+  NavigateOptions,
   NavigationState,
   RecentFolder,
   SearchResult,
@@ -27,7 +28,8 @@ const api: ViewerApi = {
     ipcRenderer.invoke("folder:open-recent", path) as Promise<Deck | null>,
   getRecentFolders: () => ipcRenderer.invoke("folder:get-recent") as Promise<RecentFolder[]>,
   getCurrentDeck: () => ipcRenderer.invoke("deck:get-current") as Promise<Deck | null>,
-  navigate: (href: string) => ipcRenderer.invoke("viewer:navigate", href) as Promise<void>,
+  navigate: (href: string, options?: NavigateOptions) =>
+    ipcRenderer.invoke("viewer:navigate", href, options) as Promise<void>,
   openExternal: (href: string) =>
     ipcRenderer.invoke("viewer:open-external", href) as Promise<void>,
   setViewBounds: (bounds: ViewBounds) =>
@@ -41,6 +43,8 @@ const api: ViewerApi = {
   stopFindInPage: () => ipcRenderer.invoke("viewer:stop-find-in-page") as Promise<void>,
   focusSearch: (clickPoint?: InputPoint) =>
     ipcRenderer.invoke("viewer:focus-search", clickPoint) as Promise<void>,
+  focusDocument: () => ipcRenderer.invoke("viewer:focus-document") as Promise<void>,
+  focusSidebar: () => ipcRenderer.invoke("viewer:focus-sidebar") as Promise<void>,
   onDeckChanged: (callback: (deck: Deck) => void) => on("deck:changed", callback),
   onNavigationChanged: (callback: (state: NavigationState) => void) =>
     on("viewer:navigation-changed", callback),
@@ -48,7 +52,9 @@ const api: ViewerApi = {
     on("viewer:find-result", callback),
   onZoomChanged: (callback: (factor: number) => void) =>
     on("viewer:zoom-changed", callback),
-  onFocusSearch: (callback: () => void) => on("viewer:focus-search", callback)
+  onFocusSearch: (callback: () => void) => on("viewer:focus-search", callback),
+  onUiFocusRestored: (callback: () => void) => on("viewer:ui-focus-restored", callback),
+  onDocumentEscape: (callback: () => void) => on("viewer:document-escape", callback)
 };
 
 contextBridge.exposeInMainWorld("viewerApi", api);

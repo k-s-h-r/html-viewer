@@ -88,12 +88,16 @@ export interface RecentFolder {
   name: string;
 }
 
+export interface NavigateOptions {
+  retainUiFocus?: boolean;
+}
+
 export interface ViewerApi {
   openFolder(): Promise<Deck | null>;
   openRecentFolder(path: string): Promise<Deck | null>;
   getRecentFolders(): Promise<RecentFolder[]>;
   getCurrentDeck(): Promise<Deck | null>;
-  navigate(href: string): Promise<void>;
+  navigate(href: string, options?: NavigateOptions): Promise<void>;
   openExternal(href: string): Promise<void>;
   setViewBounds(bounds: ViewBounds): Promise<void>;
   setZoomFactor(factor: number): Promise<void>;
@@ -101,9 +105,13 @@ export interface ViewerApi {
   findInPage(request: FindRequest): Promise<void>;
   stopFindInPage(): Promise<void>;
   focusSearch(clickPoint?: InputPoint): Promise<void>;
+  focusDocument(): Promise<void>;
+  focusSidebar(): Promise<void>;
   onDeckChanged(callback: (deck: Deck) => void): () => void;
   onNavigationChanged(callback: (state: NavigationState) => void): () => void;
   onFindResult(callback: (result: FindResult) => void): () => void;
   onZoomChanged(callback: (factor: number) => void): () => void;
   onFocusSearch(callback: () => void): () => void;
+  onUiFocusRestored(callback: () => void): () => void;
+  onDocumentEscape(callback: () => void): () => void;
 }

@@ -15,6 +15,7 @@ import type {
   FindRequest,
   FindResult,
   InputPoint,
+  NavigateOptions,
   NavigationState,
   RecentFolder,
   ViewBounds
@@ -37,6 +38,7 @@ let searchCatalog: SearchCatalog | null = null;
 let recentFolders: RecentFolder[] = [];
 let zoomFactor = 1;
 let isStoppingForQuit = false;
+let pendingRetainUiFocus = false;
 
 function recentFoldersPath(): string {
   return path.join(app.getPath("userData"), "recent-folders.json");
@@ -189,6 +191,14 @@ function clickRendererPoint(point: InputPoint): void {
 }
 
 async function focusSearchInRenderer(clickPoint?: InputPoint): Promise<void> {
+  focusRendererWebContents();
+  if (clickPoint) {
+    clickRendererPoint(clickPoint);
+  }
+  sendToRenderer("viewer:focus-search", null);
+}
+
+function focusRendererWebContents(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return;
   }
@@ -198,14 +208,39 @@ async function focusSearchInRenderer(clickPoint?: InputPoint): Promise<void> {
   }
   mainWindow.focus();
   mainWindow.webContents.focus();
-
-  if (clickPoint) {
-    clickRendererPoint(clickPoint);
-  }
-  sendToRenderer("viewer:focus-search", null);
 }
 
-function registerDocumentFocusSearchShortcut(contents: Electron.WebContents): void {
+function focusDocumentView(): void {
+  if (!documentView || !mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  if (process.platform === "darwin") {
+    app.focus({ steal: true });
+  }
+  mainWindow.focus();
+  documentView.webContents.focus();
+}
+
+function focusSidebarInRenderer(): void {
+  focusRendererWebContents();
+  sendToRenderer("viewer:ui-focus-restored", null);
+}
+
+function restoreRendererFocusAfterNavigation(): void {
+  focusSidebarInRenderer();
+}
+
+function finishRetainUiFocus(): void {
+  if (!pendingRetainUiFocus) {
+    return;
+  }
+  pendingRetainUiFocus = false;
+  restoreRendererFocusAfterNavigation();
+  setTimeout(restoreRendererFocusAfterNavigation, 0);
+}
+
+function registerDocumentKeyboardShortcuts(contents: Electron.WebContents): void {
   contents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") {
       return;
@@ -213,6 +248,11 @@ function registerDocumentFocusSearchShortcut(contents: Electron.WebContents): vo
     if ((input.control || input.meta) && input.key.toLowerCase() === "f") {
       event.preventDefault();
       setTimeout(() => focusSearchInRenderer(), 0);
+      return;
+    }
+    if (input.key === "Escape") {
+      event.preventDefault();
+      sendToRenderer("viewer:document-escape", null);
     }
   });
 }
@@ -257,7 +297,15 @@ function createDocumentView(): WebContentsView {
     sendToRenderer("viewer:find-result", payload);
   });
 
-  registerDocumentFocusSearchShortcut(view.webContents);
+  view.webContents.on("did-finish-load", () => {
+    finishRetainUiFocus();
+  });
+
+  view.webContents.on("did-fail-load", () => {
+    pendingRetainUiFocus = false;
+  });
+
+  registerDocumentKeyboardShortcuts(view.webContents);
 
   return view;
 }
@@ -314,7 +362,7 @@ function firstNavigablePage(deck: Deck): string | null {
   return deck.pages.find((page) => page.kind === "page")?.href ?? null;
 }
 
-async function loadHref(href: string): Promise<void> {
+async function loadHref(href: string, options?: NavigateOptions): Promise<void> {
   if (!documentView || !localServer || !currentDeck) {
     return;
   }
@@ -334,7 +382,9 @@ async function loadHref(href: string): Promise<void> {
     return;
   }
 
+  pendingRetainUiFocus = options?.retainUiFocus ?? false;
   await documentView.webContents.loadURL(localServer.toUrl(`${page.path}${parsed.hash}`));
+  finishRetainUiFocus();
 }
 
 async function openFolderDialog(): Promise<Deck | null> {
@@ -393,7 +443,9 @@ ipcMain.handle("folder:open", () => openFolderDialog());
 ipcMain.handle("folder:open-recent", (_event, folderPath: string) => openFolderPath(folderPath));
 ipcMain.handle("folder:get-recent", () => recentFolders);
 ipcMain.handle("deck:get-current", () => currentDeck);
-ipcMain.handle("viewer:navigate", (_event, href: string) => loadHref(href));
+ipcMain.handle("viewer:navigate", (_event, href: string, options?: NavigateOptions) =>
+  loadHref(href, options)
+);
 ipcMain.handle("viewer:open-external", (_event, href: string) => shell.openExternal(href));
 ipcMain.handle("viewer:set-bounds", (_event, bounds: ViewBounds) => setViewBounds(bounds));
 ipcMain.handle("viewer:set-zoom-factor", (_event, factor: number) => {
@@ -412,6 +464,12 @@ ipcMain.handle("search:query", (_event, query: string, matchCase: boolean) => {
 ipcMain.handle("viewer:focus-search", (_event, clickPoint?: InputPoint) =>
   focusSearchInRenderer(clickPoint)
 );
+ipcMain.handle("viewer:focus-document", () => {
+  focusDocumentView();
+});
+ipcMain.handle("viewer:focus-sidebar", () => {
+  focusSidebarInRenderer();
+});
 ipcMain.handle("viewer:find-in-page", async (_event, request: FindRequest) => {
   if (!documentView || !request.query) {
     return;
