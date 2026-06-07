@@ -12,6 +12,8 @@ import {
 } from "electron";
 import type {
   Deck,
+  DeckPage,
+  EditorDocument,
   FindRequest,
   FindResult,
   InputPoint,
@@ -19,7 +21,7 @@ import type {
   RecentFolder,
   ViewBounds
 } from "../shared/types.js";
-import { buildDeck, findDeckPageByHref, flattenDeckPages, splitHref } from "./deck.js";
+import { buildDeck, findDeckPageByHref, flattenDeckPages, localPathFromPage, splitHref } from "./deck.js";
 import { startLocalServer, type LocalServerHandle } from "./localServer.js";
 import { SearchCatalog } from "./search.js";
 
@@ -34,9 +36,11 @@ let documentView: WebContentsView | null = null;
 let currentDeck: Deck | null = null;
 let localServer: LocalServerHandle | null = null;
 let searchCatalog: SearchCatalog | null = null;
+const editorSessions = new Map<number, { pagePath: string }>();
 let recentFolders: RecentFolder[] = [];
 let zoomFactor = 1;
 let isStoppingForQuit = false;
+let documentNavigation: Promise<void> = Promise.resolve();
 function recentFoldersPath(): string {
   return path.join(app.getPath("userData"), "recent-folders.json");
 }
@@ -350,6 +354,77 @@ function firstNavigablePage(deck: Deck): string | null {
   return deck.pages.find((page) => page.kind === "page")?.href ?? null;
 }
 
+function isNavigationAborted(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+  const record = error as { errno?: number; code?: string };
+  return record.errno === -3 || record.code === "ERR_ABORTED";
+}
+
+async function runDocumentNavigation(task: () => Promise<void>): Promise<void> {
+  const run = async () => {
+    try {
+      await task();
+    } catch (error) {
+      if (!isNavigationAborted(error)) {
+        throw error;
+      }
+    }
+  };
+  const next = documentNavigation.then(run, run);
+  documentNavigation = next.catch(() => {});
+  return next;
+}
+
+async function loadDocumentUrl(url: string, reload = false): Promise<void> {
+  if (!documentView) {
+    return;
+  }
+  if (!reload && documentView.webContents.getURL() === url) {
+    return;
+  }
+  await runDocumentNavigation(async () => {
+    await documentView!.webContents.loadURL(url);
+  });
+}
+
+async function reloadDocumentView(): Promise<void> {
+  if (!documentView) {
+    return;
+  }
+
+  await runDocumentNavigation(async () => {
+    const webContents = documentView!.webContents;
+    await new Promise<void>((resolve, reject) => {
+      const onFinish = () => {
+        cleanup();
+        resolve();
+      };
+      const onFail = (
+        _event: Electron.Event,
+        errorCode: number,
+        errorDescription: string,
+        validatedURL: string
+      ) => {
+        cleanup();
+        if (isNavigationAborted({ errno: errorCode, code: errorDescription })) {
+          resolve();
+          return;
+        }
+        reject(new Error(`${errorDescription} (${errorCode}) loading '${validatedURL}'`));
+      };
+      const cleanup = () => {
+        webContents.removeListener("did-finish-load", onFinish);
+        webContents.removeListener("did-fail-load", onFail);
+      };
+      webContents.once("did-finish-load", onFinish);
+      webContents.once("did-fail-load", onFail);
+      webContents.reloadIgnoringCache();
+    });
+  });
+}
+
 async function loadHref(href: string): Promise<void> {
   if (!documentView || !localServer || !currentDeck) {
     return;
@@ -370,14 +445,128 @@ async function loadHref(href: string): Promise<void> {
     if (!fallback) {
       return;
     }
-    await documentView.webContents.loadURL(
-      localServer.toUrl(`${fallback.path}${parsed.hash}`)
-    );
+    await loadDocumentUrl(localServer.toUrl(`${fallback.path}${parsed.hash}`));
     return;
   }
 
   const { hash } = splitHref(href);
-  await documentView.webContents.loadURL(localServer.toUrl(`${page.path}${hash}`));
+  await loadDocumentUrl(localServer.toUrl(`${page.path}${hash}`));
+}
+
+function findDeckPageByPath(pagePath: string): DeckPage | undefined {
+  if (!currentDeck) {
+    return undefined;
+  }
+  return flattenDeckPages(currentDeck.pages).find(
+    (page) => page.kind === "page" && page.path === pagePath
+  );
+}
+
+function editorRendererUrl(): string {
+  if (process.env.VITE_DEV_SERVER_URL) {
+    return new URL("editor.html", process.env.VITE_DEV_SERVER_URL).toString();
+  }
+  return `file://${path.join(__dirname, "../../dist/editor.html")}`;
+}
+
+async function editorDocumentForPage(pagePath: string): Promise<EditorDocument> {
+  if (!currentDeck || !localServer) {
+    throw new Error("編集する仕様書フォルダが開かれていません。");
+  }
+
+  const page = findDeckPageByPath(pagePath);
+  if (!page) {
+    throw new Error("編集対象のHTMLページが見つかりません。");
+  }
+
+  const filePath = localPathFromPage(currentDeck.rootDir, page);
+  if (!filePath) {
+    throw new Error("編集対象のHTMLページが仕様書フォルダ外です。");
+  }
+
+  return {
+    html: await readFile(filePath, "utf8"),
+    name: path.basename(page.path),
+    pagePath: page.path,
+    baseHref: new URL("./", localServer.toUrl(page.path)).toString()
+  };
+}
+
+async function openEditorWindow(pagePath: string): Promise<void> {
+  const initialDocument = await editorDocumentForPage(pagePath);
+
+  const editorWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 980,
+    minHeight: 640,
+    title: `HTML仕様書エディター - ${initialDocument.name}`,
+    webPreferences: {
+      preload: path.join(__dirname, "../preload/index.js"),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+
+  editorSessions.set(editorWindow.webContents.id, {
+    pagePath: initialDocument.pagePath
+  });
+  editorWindow.on("closed", () => {
+    editorSessions.delete(editorWindow.webContents.id);
+  });
+
+  await editorWindow.loadURL(editorRendererUrl());
+}
+
+function currentDocumentPagePath(): string | null {
+  if (!documentView || !localServer) {
+    return null;
+  }
+
+  const url = documentView.webContents.getURL();
+  if (!url.startsWith(localServer.origin)) {
+    return null;
+  }
+
+  return navigationStateFromUrl(url).pagePath ?? null;
+}
+
+async function refreshDocumentViewIfShowingPage(pagePath: string): Promise<void> {
+  if (!documentView || !localServer || currentDocumentPagePath() !== pagePath) {
+    return;
+  }
+
+  const currentUrl = documentView.webContents.getURL();
+  if (!currentUrl.startsWith(localServer.origin)) {
+    return;
+  }
+
+  await reloadDocumentView();
+}
+
+async function saveEditorPage(webContentsId: number, html: string): Promise<void> {
+  if (!currentDeck) {
+    throw new Error("保存先の仕様書フォルダが開かれていません。");
+  }
+
+  const session = editorSessions.get(webContentsId);
+  if (!session) {
+    throw new Error("編集セッションが見つかりません。");
+  }
+
+  const page = findDeckPageByPath(session.pagePath);
+  if (!page) {
+    throw new Error("保存先のHTMLページが見つかりません。");
+  }
+
+  const filePath = localPathFromPage(currentDeck.rootDir, page);
+  if (!filePath) {
+    throw new Error("保存先のHTMLページが仕様書フォルダ外です。");
+  }
+
+  await writeFile(filePath, html, "utf8");
+  searchCatalog = await SearchCatalog.create(currentDeck.rootDir, currentDeck);
+  await refreshDocumentViewIfShowingPage(page.path);
 }
 
 async function openFolderDialog(): Promise<Deck | null> {
@@ -442,6 +631,9 @@ ipcMain.handle("viewer:set-bounds", (_event, bounds: ViewBounds) => setViewBound
 ipcMain.handle("viewer:set-zoom-factor", (_event, factor: number) => {
   setBrowserZoomFactor(factor);
 });
+ipcMain.handle("viewer:open-editor", (_event, pagePath: string) =>
+  openEditorWindow(pagePath)
+);
 ipcMain.handle("search:query", (_event, query: string, matchCase: boolean) => {
   return (
     searchCatalog?.query(query, matchCase) ?? {
@@ -487,6 +679,13 @@ ipcMain.handle("viewer:find-in-page", async (_event, request: FindRequest) => {
 ipcMain.handle("viewer:stop-find-in-page", () => {
   documentView?.webContents.stopFindInPage("clearSelection");
 });
+ipcMain.handle("editor:get-initial-document", (event) => {
+  const session = editorSessions.get(event.sender.id);
+  return session ? editorDocumentForPage(session.pagePath) : null;
+});
+ipcMain.handle("editor:save-page", (event, html: string) =>
+  saveEditorPage(event.sender.id, html)
+);
 
 app
   .whenReady()

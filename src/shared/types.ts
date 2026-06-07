@@ -90,6 +90,13 @@ export interface RecentFolder {
   name: string;
 }
 
+export interface EditorDocument {
+  html: string;
+  name: string;
+  pagePath: string;
+  baseHref: string;
+}
+
 export interface ViewerApi {
   openFolder(): Promise<Deck | null>;
   openRecentFolder(path: string): Promise<Deck | null>;
@@ -102,6 +109,7 @@ export interface ViewerApi {
   search(query: string, matchCase: boolean): Promise<SearchResult>;
   findInPage(request: FindRequest): Promise<void>;
   stopFindInPage(): Promise<void>;
+  openEditor(pagePath: string): Promise<void>;
   focusSearch(clickPoint?: InputPoint): Promise<void>;
   focusDocument(): Promise<void>;
   focusSidebar(): Promise<void>;
@@ -113,4 +121,9 @@ export interface ViewerApi {
   onUiFocusRestored(callback: () => void): () => void;
   onDocumentEscape(callback: () => void): () => void;
   onSidebarLayoutReset(callback: () => void): () => void;
+}
+
+export interface EditorApi {
+  getInitialDocument(): Promise<EditorDocument | null>;
+  savePage(html: string): Promise<void>;
 }

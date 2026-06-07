@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import type {
   Deck,
+  EditorApi,
+  EditorDocument,
   FindRequest,
   FindResult,
   InputPoint,
@@ -39,6 +41,8 @@ const api: ViewerApi = {
   findInPage: (request: FindRequest) =>
     ipcRenderer.invoke("viewer:find-in-page", request) as Promise<void>,
   stopFindInPage: () => ipcRenderer.invoke("viewer:stop-find-in-page") as Promise<void>,
+  openEditor: (pagePath: string) =>
+    ipcRenderer.invoke("viewer:open-editor", pagePath) as Promise<void>,
   focusSearch: (clickPoint?: InputPoint) =>
     ipcRenderer.invoke("viewer:focus-search", clickPoint) as Promise<void>,
   focusDocument: () => ipcRenderer.invoke("viewer:focus-document") as Promise<void>,
@@ -56,4 +60,11 @@ const api: ViewerApi = {
   onSidebarLayoutReset: (callback: () => void) => on("settings:reset-sidebar-layout", callback)
 };
 
+const editorApi: EditorApi = {
+  getInitialDocument: () =>
+    ipcRenderer.invoke("editor:get-initial-document") as Promise<EditorDocument | null>,
+  savePage: (html: string) => ipcRenderer.invoke("editor:save-page", html) as Promise<void>
+};
+
+contextBridge.exposeInMainWorld("editorApi", editorApi);
 contextBridge.exposeInMainWorld("viewerApi", api);

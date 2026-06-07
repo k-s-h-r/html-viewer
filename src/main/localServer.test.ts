@@ -84,6 +84,27 @@ describe("startLocalServer", () => {
     }
   });
 
+  it("serves updated file content after write", async () => {
+    const tmpDir = await mkdtemp(path.join(os.tmpdir(), "html-viewer-"));
+
+    try {
+      const filePath = path.join(tmpDir, "page.html");
+      await writeFile(filePath, "<html><body>version-1</body></html>");
+
+      server = await startLocalServer(tmpDir);
+
+      const first = await fetch(server.toUrl("page.html"));
+      expect(await first.text()).toContain("version-1");
+
+      await writeFile(filePath, "<html><body>version-2</body></html>");
+
+      const second = await fetch(server.toUrl("page.html"));
+      expect(await second.text()).toContain("version-2");
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects symlink escapes outside the root", async () => {
     const tmpDir = await mkdtemp(path.join(os.tmpdir(), "html-viewer-"));
     const secretFile = path.join(tmpDir, "secret.txt");

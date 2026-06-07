@@ -147,7 +147,7 @@ async function closeServer(server: Server): Promise<void> {
 
 export async function startLocalServer(rootDir: string): Promise<LocalServerHandle> {
   const serve = sirv(rootDir, {
-    dev: false,
+    dev: true,
     etag: true,
     dotfiles: false,
     extensions: SIRV_EXTENSIONS,
