@@ -2,10 +2,14 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { load } from "cheerio";
 import type { Deck, DeckAnchor, DeckPage } from "../shared/types.js";
+import { flattenDeckPages, splitHref } from "../shared/deckUtils.js";
+
+export { flattenDeckPages, splitHref };
 
 interface TocLink {
   href: string;
   text: string;
+  tocNum: string | null;
 }
 
 function toPosix(relativePath: string): string {
@@ -24,18 +28,6 @@ async function fileExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-function splitHref(href: string): { pathPart: string; hash: string } {
-  const trimmed = href.trim();
-  const hashIndex = trimmed.indexOf("#");
-  const beforeHash = hashIndex >= 0 ? trimmed.slice(0, hashIndex) : trimmed;
-  const hash = hashIndex >= 0 ? trimmed.slice(hashIndex) : "";
-  const queryIndex = beforeHash.indexOf("?");
-  return {
-    pathPart: queryIndex >= 0 ? beforeHash.slice(0, queryIndex) : beforeHash,
-    hash
-  };
 }
 
 function isHtmlPath(pathPart: string): boolean {
@@ -69,19 +61,53 @@ async function inferPageTitle(filePath: string): Promise<string> {
   }
 }
 
+function parseTocNum(raw: string): string | null {
+  const value = raw.trim();
+  if (!value || value === "—" || value === "↗") {
+    return null;
+  }
+  return value;
+}
+
 function extractTocLinks(indexHtml: string): TocLink[] {
   const $ = load(indexHtml);
   return $("a[href]")
     .toArray()
-    .map((element) => ({
-      href: String($(element).attr("href") ?? "").trim(),
-      text: $(element).text().replace(/\s+/g, " ").trim()
-    }))
+    .map((element) => {
+      const $element = $(element);
+      const tocNum = parseTocNum($element.find(".toc-num").first().text());
+      const title =
+        $element.find(".toc-name").first().text().trim() ||
+        $element.text().replace(/\s+/g, " ").trim();
+      return {
+        href: String($element.attr("href") ?? "").trim(),
+        text: title,
+        tocNum
+      };
+    })
     .filter((link) => link.href.length > 0);
 }
 
 function sortNatural(values: string[]): string[] {
   return values.sort((a, b) => a.localeCompare(b, "ja", { numeric: true }));
+}
+
+function parentTocNum(tocNum: string): string {
+  const dotIndex = tocNum.lastIndexOf(".");
+  const dashIndex = tocNum.lastIndexOf("-");
+  const splitIndex = Math.max(dotIndex, dashIndex);
+  return splitIndex > 0 ? tocNum.slice(0, splitIndex) : tocNum;
+}
+
+function isSubTocNum(tocNum: string): boolean {
+  return parentTocNum(tocNum) !== tocNum;
+}
+
+function mergeKey(relativePath: string, tocNum: string | null): string {
+  if (tocNum) {
+    return `toc:${tocNum}`;
+  }
+  return `path:${relativePath}`;
 }
 
 async function scanHtmlFiles(rootDir: string, currentDir = rootDir): Promise<string[]> {
@@ -122,6 +148,7 @@ async function buildFallbackDeck(rootDir: string, rootName: string): Promise<Dec
       href: relativePath,
       kind: "page",
       exists: true,
+      children: [],
       anchors: []
     });
   }
@@ -143,6 +170,7 @@ function createExternalPage(link: TocLink): DeckPage {
     href: link.href,
     kind: "external",
     exists: true,
+    children: [],
     anchors: [],
     reason: "外部リンク"
   };
@@ -170,6 +198,8 @@ async function createInternalPage(
     return null;
   }
 
+  const pageId = link.tocNum ? `${relativePath}::${link.tocNum}` : relativePath;
+
   if (!isInsideRoot(rootDir, targetPath)) {
     return {
       id: `out-of-scope:${link.href}`,
@@ -178,6 +208,8 @@ async function createInternalPage(
       href: link.href,
       kind: "out-of-scope",
       exists: false,
+      tocNum: link.tocNum ?? undefined,
+      children: [],
       anchors: hash ? [makeAnchor(link.href, hash, link.text)] : [],
       reason: "範囲外"
     };
@@ -187,15 +219,42 @@ async function createInternalPage(
   const title = link.text || (exists ? await inferPageTitle(targetPath) : path.basename(pathPart));
 
   return {
-    id: relativePath,
+    id: pageId,
     title,
     path: relativePath,
     href: hash ? `${relativePath}${hash}` : relativePath,
     kind: exists ? "page" : "missing",
     exists,
-    anchors: hash ? [makeAnchor(relativePath, hash, link.text)] : [],
+    tocNum: link.tocNum ?? undefined,
+    children: [],
+    anchors: hash && !link.tocNum ? [makeAnchor(relativePath, hash, link.text)] : [],
     reason: exists ? undefined : "見つかりません"
   };
+}
+
+function nestSubPages(pages: DeckPage[]): DeckPage[] {
+  const pageByTocNum = new Map<string, DeckPage>();
+  for (const page of pages) {
+    if (page.tocNum) {
+      page.children = [];
+      pageByTocNum.set(page.tocNum, page);
+    }
+  }
+
+  const roots: DeckPage[] = [];
+
+  for (const page of pages) {
+    if (page.tocNum && isSubTocNum(page.tocNum)) {
+      const parent = pageByTocNum.get(parentTocNum(page.tocNum));
+      if (parent) {
+        parent.children.push(page);
+        continue;
+      }
+    }
+    roots.push(page);
+  }
+
+  return roots;
 }
 
 export async function buildDeck(rootDir: string): Promise<Deck> {
@@ -230,18 +289,24 @@ export async function buildDeck(rootDir: string): Promise<Deck> {
       continue;
     }
 
-    const existingPage = pages.get(internalPage.id);
+    const key =
+      internalPage.kind === "out-of-scope"
+        ? internalPage.id
+        : mergeKey(internalPage.path, link.tocNum);
+
+    const existingPage = pages.get(key);
     if (existingPage) {
       if (!existingPage.title && internalPage.title) {
         existingPage.title = internalPage.title;
       }
-      for (const anchor of internalPage.anchors) {
-        addAnchorIfNeeded(existingPage, anchor.hash, anchor.title);
+      const { hash } = splitHref(link.href);
+      if (hash) {
+        addAnchorIfNeeded(existingPage, hash, link.text);
       }
       continue;
     }
 
-    pages.set(internalPage.id, internalPage);
+    pages.set(key, internalPage);
     orderedPages.push(internalPage);
   }
 
@@ -252,7 +317,7 @@ export async function buildDeck(rootDir: string): Promise<Deck> {
   return {
     rootDir,
     rootName,
-    pages: orderedPages,
+    pages: nestSubPages(orderedPages),
     hasToc: true
   };
 }
@@ -264,4 +329,15 @@ export function localPathFromPage(rootDir: string, page: DeckPage): string | nul
 
   const targetPath = path.resolve(rootDir, page.path);
   return isInsideRoot(rootDir, targetPath) ? targetPath : null;
+}
+
+export function findDeckPageByHref(deck: Deck, href: string): DeckPage | undefined {
+  const target = splitHref(href);
+  return flattenDeckPages(deck.pages).find((candidate) => {
+    if (candidate.kind !== "page") {
+      return false;
+    }
+    const candidateTarget = splitHref(candidate.href);
+    return candidateTarget.pathPart === target.pathPart && candidateTarget.hash === target.hash;
+  });
 }

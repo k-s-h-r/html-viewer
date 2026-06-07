@@ -4,7 +4,6 @@ import type {
   FindRequest,
   FindResult,
   InputPoint,
-  NavigateOptions,
   NavigationState,
   RecentFolder,
   SearchResult,
@@ -28,8 +27,7 @@ const api: ViewerApi = {
     ipcRenderer.invoke("folder:open-recent", path) as Promise<Deck | null>,
   getRecentFolders: () => ipcRenderer.invoke("folder:get-recent") as Promise<RecentFolder[]>,
   getCurrentDeck: () => ipcRenderer.invoke("deck:get-current") as Promise<Deck | null>,
-  navigate: (href: string, options?: NavigateOptions) =>
-    ipcRenderer.invoke("viewer:navigate", href, options) as Promise<void>,
+  navigate: (href: string) => ipcRenderer.invoke("viewer:navigate", href) as Promise<void>,
   openExternal: (href: string) =>
     ipcRenderer.invoke("viewer:open-external", href) as Promise<void>,
   setViewBounds: (bounds: ViewBounds) =>

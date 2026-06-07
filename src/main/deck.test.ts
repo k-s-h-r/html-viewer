@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildDeck } from "./deck.js";
+import { buildDeck, flattenDeckPages } from "./deck.js";
 
 const sampleDeckPath = path.resolve(process.cwd(), "sample-decks/basic");
 
@@ -16,6 +16,7 @@ describe("buildDeck", () => {
       "intro.html",
       "chapters/setup.html",
       "chapters/search.html",
+      "chapters/search.html",
       "missing.html",
       "../outside.html",
       "https://developer.mozilla.org/ja/"
@@ -23,26 +24,97 @@ describe("buildDeck", () => {
 
     expect(deck.pages[0]).toMatchObject({
       title: "概要",
+      tocNum: "1",
       kind: "page",
       exists: true
     });
-    expect(deck.pages[2].anchors).toEqual([
-      {
-        id: "chapters/search.html#catalog",
-        title: "検索: 全ページカタログ",
-        href: "chapters/search.html#catalog",
-        hash: "#catalog"
-      },
-      {
-        id: "chapters/search.html#in-page",
-        title: "検索: ページ内検索",
-        href: "chapters/search.html#in-page",
-        hash: "#in-page"
-      }
+
+    expect(deck.pages[1]).toMatchObject({
+      title: "セットアップ",
+      tocNum: "2",
+      kind: "page",
+      exists: true
+    });
+    expect(deck.pages[1].children.map((child) => child.tocNum)).toEqual(["2-1", "2-2"]);
+    expect(deck.pages[1].children[0]).toMatchObject({
+      title: "フォルダ構成",
+      href: "chapters/setup.html#folder"
+    });
+    expect(deck.pages[1].children[1]).toMatchObject({
+      title: "ローカル配信",
+      href: "chapters/setup.html#serving"
+    });
+
+    expect(deck.pages[2]).toMatchObject({
+      title: "検索",
+      tocNum: "3",
+      href: "chapters/search.html",
+      anchors: []
+    });
+    expect(deck.pages[3]).toMatchObject({
+      title: "全ページカタログ",
+      tocNum: "4",
+      href: "chapters/search.html#catalog",
+      anchors: []
+    });
+
+    expect(flattenDeckPages(deck.pages).filter((page) => page.kind === "page")).toHaveLength(6);
+    expect(deck.pages[4]).toMatchObject({ kind: "missing", reason: "見つかりません" });
+    expect(deck.pages[5]).toMatchObject({ kind: "out-of-scope", reason: "範囲外" });
+    expect(deck.pages[6]).toMatchObject({ kind: "external", reason: "外部リンク" });
+  });
+
+  it("merges hash links without distinct toc numbers into one page", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "html-viewer-deck-"));
+    await writeFile(
+      path.join(rootDir, "index.html"),
+      `<!doctype html><html><body>
+        <a href="page.html#one"><span class="toc-name">One</span></a>
+        <a href="page.html#two"><span class="toc-name">Two</span></a>
+      </body></html>`
+    );
+    await writeFile(path.join(rootDir, "page.html"), "<!doctype html><title>Page</title>");
+
+    const deck = await buildDeck(rootDir);
+
+    expect(deck.pages).toHaveLength(1);
+    expect(deck.pages[0].anchors).toEqual([
+      expect.objectContaining({ hash: "#one", title: "One" }),
+      expect.objectContaining({ hash: "#two", title: "Two" })
     ]);
-    expect(deck.pages[3]).toMatchObject({ kind: "missing", reason: "見つかりません" });
-    expect(deck.pages[4]).toMatchObject({ kind: "out-of-scope", reason: "範囲外" });
-    expect(deck.pages[5]).toMatchObject({ kind: "external", reason: "外部リンク" });
+  });
+
+  it("nests dot-separated and multi-level toc numbers", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "html-viewer-deck-"));
+    await writeFile(
+      path.join(rootDir, "index.html"),
+      `<!doctype html><html><body>
+        <a href="a.html"><span class="toc-num">1</span><span class="toc-name">Chapter</span></a>
+        <a href="a.html#sec1"><span class="toc-num">1.1</span><span class="toc-name">Section 1</span></a>
+        <a href="a.html#sec2"><span class="toc-num">1.1.1</span><span class="toc-name">Subsection</span></a>
+        <a href="b.html"><span class="toc-num">2</span><span class="toc-name">Other</span></a>
+        <a href="b.html#x"><span class="toc-num">2.1</span><span class="toc-name">Other sub</span></a>
+      </body></html>`
+    );
+    await writeFile(path.join(rootDir, "a.html"), "<!doctype html><title>A</title>");
+    await writeFile(path.join(rootDir, "b.html"), "<!doctype html><title>B</title>");
+
+    const deck = await buildDeck(rootDir);
+
+    expect(deck.pages[0].tocNum).toBe("1");
+    expect(deck.pages[0].children.map((child) => child.tocNum)).toEqual(["1.1"]);
+    expect(deck.pages[0].children[0].children.map((child) => child.tocNum)).toEqual(["1.1.1"]);
+
+    expect(deck.pages[1].tocNum).toBe("2");
+    expect(deck.pages[1].children.map((child) => child.tocNum)).toEqual(["2.1"]);
+
+    expect(flattenDeckPages(deck.pages).map((page) => page.tocNum)).toEqual([
+      "1",
+      "1.1",
+      "1.1.1",
+      "2",
+      "2.1"
+    ]);
   });
 
   it("falls back to recursive HTML scanning when index.html is missing", async () => {

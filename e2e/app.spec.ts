@@ -103,6 +103,16 @@ async function getZoomFactors(electronApp: ElectronApplication): Promise<{
   });
 }
 
+async function expectSelectedPageFocused(window: Page): Promise<void> {
+  await expect
+    .poll(async () => {
+      const button = window.getByTestId("selected-page-button");
+      await button.focus();
+      return button.evaluate((element) => element === document.activeElement);
+    })
+    .toBe(true);
+}
+
 async function waitForDocumentViewUrl(
   electronApp: ElectronApplication,
   pattern: RegExp
@@ -212,7 +222,7 @@ test.describe("HTML Viewer", () => {
       await expect(window.getByTestId("app-shell")).toBeVisible();
 
       const pageRows = window.getByTestId("page-row");
-      await expect(pageRows).toHaveCount(6);
+      await expect(pageRows).toHaveCount(7);
       await expect(window.getByRole("button", { name: /概要/ })).toBeVisible();
       await expect(window.getByRole("button", { name: /セットアップ/ })).toBeVisible();
 
@@ -269,7 +279,7 @@ test.describe("HTML Viewer", () => {
       await historyButton.click();
       await window.getByRole("menuitem", { name: "basic" }).click();
 
-      await expect(window.getByTestId("page-row")).toHaveCount(6);
+      await expect(window.getByTestId("page-row")).toHaveCount(7);
       await waitForDocumentViewUrl(electronApp, /intro\.html/i);
       await expectUiIntact(window, electronApp);
     } finally {
@@ -317,18 +327,24 @@ test.describe("HTML Viewer", () => {
       const setupButton = window.getByRole("button", { name: /セットアップ/ });
       await setupButton.click();
       await waitForDocumentViewUrl(electronApp, /setup\.html/i);
-
-      const selectedPageButton = window.getByTestId("selected-page-button");
-      await expect(selectedPageButton).toBeFocused();
+      await expectSelectedPageFocused(window);
 
       await window.keyboard.press("ArrowDown");
-      await waitForDocumentViewUrl(electronApp, /search\.html/i);
-      await expect(selectedPageButton).toBeFocused();
+      await waitForDocumentViewUrl(electronApp, /search\.html(?!#)/i);
+      await expectSelectedPageFocused(window);
+      await expect(window.getByTestId("selected-page-button")).toHaveAttribute(
+        "data-page-id",
+        "chapters/search.html::3"
+      );
       await expectUiIntact(window, electronApp);
 
       await window.keyboard.press("ArrowUp");
-      await waitForDocumentViewUrl(electronApp, /setup\.html/i);
-      await expect(selectedPageButton).toBeFocused();
+      await waitForDocumentViewUrl(electronApp, /setup\.html(?!#)/i);
+      await expectSelectedPageFocused(window);
+      await expect(window.getByTestId("selected-page-button")).toHaveAttribute(
+        "data-page-id",
+        "chapters/setup.html::2"
+      );
       await expectUiIntact(window, electronApp);
     } finally {
       await electronApp.close();
@@ -347,11 +363,11 @@ test.describe("HTML Viewer", () => {
       await expectUiIntact(window, electronApp);
 
       await window.getByRole("button", { name: "次のページ" }).click();
-      await waitForDocumentViewUrl(electronApp, /search\.html/i);
+      await waitForDocumentViewUrl(electronApp, /search\.html(?!#)/i);
       await expectUiIntact(window, electronApp);
 
       await window.getByRole("button", { name: "前のページ" }).click();
-      await waitForDocumentViewUrl(electronApp, /setup\.html/i);
+      await waitForDocumentViewUrl(electronApp, /setup\.html(?!#)/i);
       await expectUiIntact(window, electronApp);
 
       const sidebarButton = window.getByRole("button", { name: "サイドバー" });
@@ -410,12 +426,8 @@ test.describe("HTML Viewer", () => {
       await expect(window.getByTestId("results-pane")).toBeHidden();
       await expectUiIntact(window, electronApp);
 
-      const searchPageRow = window
-        .getByTestId("page-row")
-        .filter({ has: window.getByRole("button", { name: /検索/ }) });
-      await searchPageRow.getByRole("button", { name: "アンカーを表示" }).click();
-      await searchPageRow.getByRole("button", { name: /検索: ページ内検索/ }).click();
-      await waitForDocumentViewUrl(electronApp, /search\.html#in-page/i);
+      await window.getByRole("button", { name: /全ページカタログ/ }).click();
+      await waitForDocumentViewUrl(electronApp, /search\.html#catalog/i);
       await expectUiIntact(window, electronApp);
     } finally {
       await electronApp.close();
@@ -433,6 +445,14 @@ test.describe("HTML Viewer", () => {
       await window.getByPlaceholder(/検索/).press("Enter");
       await expect(window.getByTestId("results-pane")).toBeVisible();
       await expect(window.getByTestId("results-total")).not.toHaveText("0 件");
+
+      await window.getByTestId("results-scroll").evaluate((root) => {
+        const viewport = root.querySelector('[data-slot="scroll-area-viewport"]');
+        if (viewport instanceof HTMLElement) {
+          viewport.style.height = "120px";
+          viewport.style.maxHeight = "120px";
+        }
+      });
 
       const scrollMetrics = await window.getByTestId("results-scroll").evaluate((root) => {
         const viewport = root.querySelector('[data-slot="scroll-area-viewport"]');
