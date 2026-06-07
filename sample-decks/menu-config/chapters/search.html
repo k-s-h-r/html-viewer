@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>検索</title>
+    <link rel="stylesheet" href="../assets/styles.css" />
+  </head>
+  <body>
+    <div class="doc">
+      <header class="doc-header">
+        <p class="doc-eyebrow">第3章</p>
+        <h1 class="doc-title">検索</h1>
+        <p class="doc-lead">
+          仕様書全体を横断するカタログ検索と、表示中ページのページ内検索という二段構えの仕組みを説明します。
+        </p>
+        <ul class="doc-meta">
+          <li>カテゴリ: <b>検索</b></li>
+          <li>関連: <b>ツールバー検索ボックス</b></li>
+        </ul>
+      </header>
+
+      <main class="doc-body">
+        <section class="doc-section" id="catalog">
+          <h2><span class="sec-no">3.1</span>全ページカタログ</h2>
+          <p>
+            main プロセスが各HTMLの本文を読み取り、ページ別のヒット件数と抜粋をメモリ上に構築します。
+            検索ボックスに入力すると、ヒットしたページの一覧が右ペインに表示されます。
+          </p>
+          <ul>
+            <li>検索語の<strong>大文字小文字を区別</strong>するかどうかはツールバーで切り替えられます。</li>
+            <li>ヒット件数はページ単位で集計され、抜粋から該当箇所へジャンプできます。</li>
+          </ul>
+          <div class="callout">
+            <p>
+              <span class="callout-title">ヒント</span>
+              「次へ / 前へ」はドキュメント全体で連続します。現在ページの一致を辿り終えると、
+              次にヒットのあるページへ自動的に移動します。
+            </p>
+          </div>
+        </section>
+
+        <section class="doc-section" id="in-page">
+          <h2><span class="sec-no">3.2</span>ページ内検索</h2>
+          <p>
+            表示中のページでは Chromium の <code>findInPage</code> を使って一致箇所をハイライトします。
+            独自のDOM検索は行わず、ブラウザ標準の挙動に委ねます。
+          </p>
+          <table class="spec-table">
+            <caption>検索表示の対象範囲</caption>
+            <thead>
+              <tr>
+                <th>構造</th>
+                <th>検索表示</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>details</code> / <code>hidden=until-found</code></td>
+                <td>ブラウザ標準で自動展開され、対象になります。</td>
+              </tr>
+              <tr>
+                <td><code>display: none</code> や独自JSで隠した領域</td>
+                <td>検索表示の保証対象外です。</td>
+              </tr>
+            </tbody>
+          </table>
+          <details>
+            <summary>details 内の検索サンプル</summary>
+            <p>
+              この折りたたみ領域にある語句も、ブラウザ標準検索の対象です。
+              検索すると自動的に展開されてハイライトされます。
+            </p>
+          </details>
+        </section>
+
+        <nav class="doc-nav">
+          <a href="setup.html">
+            <span class="nav-label">前のページ</span>
+            <span class="nav-title">← セットアップ</span>
+          </a>
+          <a class="is-next" href="../intro.html">
+            <span class="nav-label">先頭に戻る</span>
+            <span class="nav-title">概要 →</span>
+          </a>
+        </nav>
+      </main>
+    </div>
+  </body>
+</html>

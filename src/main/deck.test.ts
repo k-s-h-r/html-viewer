@@ -117,6 +117,76 @@ describe("buildDeck", () => {
     ]);
   });
 
+  it("prefers menu.json over index.html", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "html-viewer-deck-"));
+    await writeFile(
+      path.join(rootDir, "menu.json"),
+      JSON.stringify({
+        pages: [
+          { href: "b.html", title: "From menu", num: "1" },
+          { href: "a.html", title: "Also menu", num: "2" }
+        ]
+      })
+    );
+    await writeFile(
+      path.join(rootDir, "index.html"),
+      `<!doctype html><html><body>
+        <a href="a.html"><span class="toc-name">From index</span></a>
+      </body></html>`
+    );
+    await writeFile(path.join(rootDir, "a.html"), "<!doctype html><title>A</title>");
+    await writeFile(path.join(rootDir, "b.html"), "<!doctype html><title>B</title>");
+
+    const deck = await buildDeck(rootDir);
+
+    expect(deck.hasToc).toBe(true);
+    expect(deck.pages.map((page) => page.title)).toEqual(["From menu", "Also menu"]);
+  });
+
+  it("falls back to index.html when menu.json is missing or empty", async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), "html-viewer-deck-"));
+    await writeFile(path.join(rootDir, "menu.json"), JSON.stringify({ pages: [] }));
+    await writeFile(
+      path.join(rootDir, "index.html"),
+      `<!doctype html><html><body>
+        <a href="page.html"><span class="toc-name">From index</span></a>
+      </body></html>`
+    );
+    await writeFile(path.join(rootDir, "page.html"), "<!doctype html><title>Page</title>");
+
+    const deck = await buildDeck(rootDir);
+
+    expect(deck.pages).toHaveLength(1);
+    expect(deck.pages[0].title).toBe("From index");
+  });
+
+  it("loads menu-config sample deck from menu.json", async () => {
+    const deckPath = path.resolve(process.cwd(), "sample-decks/menu-config");
+    const deck = await buildDeck(deckPath);
+
+    expect(deck.hasToc).toBe(true);
+    expect(deck.pages.map((page) => page.path)).toEqual([
+      "chapters/search.html",
+      "intro.html",
+      "chapters/setup.html"
+    ]);
+    expect(deck.pages[0].title).toContain("menu.json 1番目");
+    expect(deck.pages[2].children.map((child) => child.tocNum)).toEqual(["3-1", "3-2"]);
+  });
+
+  it("loads file-scan sample deck by recursive HTML scanning", async () => {
+    const deckPath = path.resolve(process.cwd(), "sample-decks/file-scan");
+    const deck = await buildDeck(deckPath);
+
+    expect(deck.hasToc).toBe(false);
+    expect(deck.warning).toContain("目次がありません");
+    expect(deck.pages.map((page) => page.path)).toEqual([
+      "01-intro.html",
+      "02-setup.html",
+      "chapters/03-search.html"
+    ]);
+  });
+
   it("falls back to recursive HTML scanning when index.html is missing", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "html-viewer-deck-"));
     await mkdir(path.join(rootDir, "chapter"), { recursive: true });
