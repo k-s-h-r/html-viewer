@@ -58,7 +58,7 @@ export function Toolbar({
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 border-b bg-background px-3">
       <div className="flex items-center gap-1.5 pr-1 font-semibold">
-        <span className="text-sm">HTML仕様書エディター</span>
+        <span className="text-sm">SpecDeck Editor</span>
       </div>
       <Separator orientation="vertical" className="mx-1 h-6 data-vertical:self-auto" />
 

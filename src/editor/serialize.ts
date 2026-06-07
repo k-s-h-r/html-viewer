@@ -44,7 +44,7 @@ export function serializeCleanDocument(doc: Document): string {
 }
 
 /** 空の初期ドキュメント(新規作成用) */
-export function emptyDocumentHtml(title = "新しい仕様書"): string {
+export function emptyDocumentHtml(title = "新しいページ"): string {
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>

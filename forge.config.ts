@@ -15,8 +15,8 @@ const config: ForgeConfig = {
   outDir: "release",
   packagerConfig: {
     asar: true,
-    appBundleId: "dev.html-viewer.app",
-    name: "HTML Viewer",
+    appBundleId: "dev.specdeck.app",
+    name: "SpecDeck",
     icon: appIcon,
     appCategoryType: "public.app-category.productivity",
     ignore: [

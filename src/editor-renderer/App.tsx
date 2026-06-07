@@ -251,7 +251,7 @@ export function App() {
     if (mode === "source" && sourceDirty && !confirmDiscardSourceChanges())
       return
     loadDocument(emptyDocumentHtml(), {
-      name: "新しい仕様書.html",
+      name: "新しいページ.html",
       handle: null,
     })
   }, [dirty, loadDocument, mode, sourceDirty])
@@ -379,7 +379,7 @@ export function App() {
         toast.success(`${fileName ?? "HTML"} に保存しました`)
         return
       }
-      const res = await saveHtmlFile(html, handle, fileName ?? "仕様書.html")
+      const res = await saveHtmlFile(html, handle, fileName ?? "page.html")
       if (res.kind === "cancelled") return
       replaceCurrentHistory(html)
       if (mode === "source") markSourceClean(html)
@@ -421,7 +421,7 @@ export function App() {
         toast.success(`${fileName ?? "HTML"} に保存しました`)
         return
       }
-      const res = await saveAsHtmlFile(html, fileName ?? "仕様書.html")
+      const res = await saveAsHtmlFile(html, fileName ?? "page.html")
       if (res.kind === "cancelled") return
       replaceCurrentHistory(html)
       if (mode === "source") markSourceClean(html)

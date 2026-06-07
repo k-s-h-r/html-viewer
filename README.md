@@ -1,4 +1,6 @@
-# HTML Viewer
+# SpecDeck
+
+PPT-like viewer and editor for HTML specifications.
 
 ローカルフォルダ内のHTML仕様書を、デッキ形式で閲覧・検索するElectronデスクトップアプリです。`index.html` や `menu.json` からページ一覧を作り、ページ移動、ズーム、全文検索、最近使ったフォルダの再オープンを提供します。
 
@@ -47,7 +49,7 @@ macOS では `release/` に `.dmg` と `.zip` が生成されます。インス�
 npm run dist:dir
 ```
 
-生成物は `release/mac-arm64/HTML Viewer.app`（Apple Silicon）または `release/mac/HTML Viewer.app`（Intel）です。
+生成物は `release/mac-arm64/SpecDeck.app`（Apple Silicon）または `release/mac/SpecDeck.app`（Intel）です。
 
 未署名のビルドは macOS で初回起動時に Gatekeeper の警告が出る場合があります。右クリック →「開く」で起動できます。
 

@@ -37,15 +37,15 @@ export function ViewerSection({
             <FileText className="size-7" />
           </div>
           <div className="space-y-2">
-            <h1 className="text-2xl font-bold tracking-tight">HTML仕様書ビューワー</h1>
+            <h1 className="text-2xl font-bold tracking-tight">SpecDeck</h1>
             <p className="mx-auto max-w-md text-sm text-muted-foreground">
-              静的HTML仕様書フォルダを開くと、PPTのようにページ移動・検索できます。
+              PPT-like viewer and editor for HTML specifications
             </p>
           </div>
           <div className="flex justify-center">
             <Button onClick={onOpenFolder}>
               <FolderOpen />
-              仕様書フォルダを開く
+              フォルダを開く
             </Button>
           </div>
         </div>

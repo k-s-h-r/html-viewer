@@ -228,7 +228,7 @@ function renderIndexTocItem(entry: TocEntry): string {
 async function writeMenuConfig(rootDir: string, entries: TocEntry[]): Promise<void> {
   const menuPath = path.join(rootDir, MENU_CONFIG_FILENAME);
   if (!isInsideRoot(rootDir, menuPath)) {
-    throw new Error("menu.json の保存先が仕様書フォルダ外です。");
+    throw new Error("menu.json の保存先がフォルダ外です。");
   }
 
   const pages = entries.map((entry) => ({
@@ -243,7 +243,7 @@ async function writeMenuConfig(rootDir: string, entries: TocEntry[]): Promise<vo
 async function writeIndexHtmlToc(rootDir: string, entries: TocEntry[]): Promise<void> {
   const indexPath = path.join(rootDir, "index.html");
   if (!isInsideRoot(rootDir, indexPath)) {
-    throw new Error("index.html の保存先が仕様書フォルダ外です。");
+    throw new Error("index.html の保存先がフォルダ外です。");
   }
 
   const html = await readFile(indexPath, "utf8");
@@ -299,7 +299,7 @@ export async function writeMenuJsonText(rootDir: string, text: string): Promise<
 
   const menuPath = path.join(rootDir, MENU_CONFIG_FILENAME);
   if (!isInsideRoot(rootDir, menuPath)) {
-    throw new Error("menu.json の保存先が仕様書フォルダ外です。");
+    throw new Error("menu.json の保存先がフォルダ外です。");
   }
 
   const normalized = menuJsonFromEntries(links.map(toTocEntry));
