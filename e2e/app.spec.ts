@@ -246,10 +246,12 @@ test.describe("HTML Viewer", () => {
       await window.getByRole("button", { name: "集中モード", exact: true }).click();
       await expect(window.getByTestId("app-shell")).toHaveAttribute("data-focus-mode", "true");
       await expect(window.getByTestId("toolbar")).toBeHidden();
+      await expect(window.getByTestId("viewer-footer")).toBeHidden();
 
       await window.keyboard.press("Escape");
       await expect(window.getByTestId("app-shell")).toHaveAttribute("data-focus-mode", "false");
       await expect(window.getByTestId("toolbar")).toBeVisible();
+      await expect(window.getByTestId("viewer-footer")).toBeVisible();
     } finally {
       await electronApp.close();
       await rm(userDataDir, { recursive: true, force: true });

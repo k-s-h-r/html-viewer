@@ -26,6 +26,7 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { Toolbar } from "./components/Toolbar";
+import { ViewerFooter } from "./components/ViewerFooter";
 import { TocSidebar } from "./components/TocSidebar";
 import { AddPageDialog } from "./components/AddPageDialog";
 import { MenuJsonEditorDialog } from "./components/MenuJsonEditorDialog";
@@ -714,7 +715,7 @@ export default function App() {
       <div
         data-testid="app-shell"
         data-focus-mode={focusMode}
-        className="flex h-full w-full min-w-[960px] flex-col overflow-hidden bg-muted/40 text-foreground"
+        className="flex h-full w-full min-w-[720px] flex-col overflow-hidden bg-muted/40 text-foreground"
       >
         {!focusMode ? (
           <Toolbar
@@ -726,8 +727,6 @@ export default function App() {
             findCounter={findCounter}
             showResults={showResults}
             selectedPageNumber={selectedPageNumber}
-            navigablePageCount={navigablePages.length}
-            zoom={zoom}
             sidebarVisible={sidebarVisible}
             resultsPaneVisible={resultsPaneVisible}
             editMode={editMode}
@@ -743,8 +742,6 @@ export default function App() {
             onMatchCaseToggle={() => setMatchCase((value) => !value)}
             onExecuteSearch={() => void executeSearch()}
             onNavigateSearchAcrossPages={navigateSearchAcrossPages}
-            onNavigateByOffset={navigateByOffset}
-            onSetZoomFactor={setZoomFactor}
             onSidebarVisibleToggle={() => setSidebarVisible((visible) => !visible)}
             onResultsPaneVisibleToggle={() => setResultsPaneVisible((visible) => !visible)}
             onFocusModeEnable={() => setFocusMode(true)}
@@ -820,6 +817,17 @@ export default function App() {
             />
           ) : null}
         </main>
+
+        {!focusMode ? (
+          <ViewerFooter
+            deck={deck}
+            selectedPageNumber={selectedPageNumber}
+            navigablePageCount={navigablePages.length}
+            zoom={zoom}
+            onNavigateByOffset={navigateByOffset}
+            onSetZoomFactor={setZoomFactor}
+          />
+        ) : null}
 
         <AddPageDialog
           open={addPageDialogOpen}

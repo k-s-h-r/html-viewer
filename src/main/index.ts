@@ -330,7 +330,7 @@ async function createMainWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    minWidth: 980,
+    minWidth: 720,
     minHeight: 640,
     title: "HTML仕様書ビューワー",
     webPreferences: {
