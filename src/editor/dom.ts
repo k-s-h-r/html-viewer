@@ -13,7 +13,7 @@ export const EDITOR_INJECTED_ATTR = "data-spec-editor-injected"
 /** ユーザーが設定した要素ロック。保存対象として HTML に残す */
 export const ELEMENT_LOCKED_ATTR = "data-he-locked"
 /** 編集対象から除外する属性(保存時クリーンアップ対象) */
-export const EDITOR_TEMP_ATTRS = ["contenteditable", "spellcheck"]
+export const EDITOR_TEMP_ATTRS = ["contenteditable", "spellcheck", "tabindex"]
 
 const VOID_OR_INLINE_SKIP = new Set([
   "script",

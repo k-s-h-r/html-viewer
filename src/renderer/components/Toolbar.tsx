@@ -132,22 +132,15 @@ export function Toolbar({
 
       <Separator orientation="vertical" className="mx-1 h-6 my-auto" />
 
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              disabled={!deck}
-              aria-label="現在ページを編集"
-              onClick={onOpenEditor}
-            >
-              <PencilLine />
-            </Button>
-          }
-        />
-        <TooltipContent side="top">現在ページを編集</TooltipContent>
-      </Tooltip>
+      <Button
+        size="sm"
+        disabled={!deck}
+        aria-label="現在ページを編集"
+        onClick={onOpenEditor}
+      >
+        <PencilLine />
+        編集
+      </Button>
 
       <Separator orientation="vertical" className="mx-1 h-6 my-auto" />
 

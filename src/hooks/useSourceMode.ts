@@ -42,6 +42,12 @@ export function useSourceMode() {
     [sourceError]
   )
 
+  const markSourceClean = useCallback((html = sourceText) => {
+    setSourceText(html)
+    setSourceBaseline(html)
+    setSourceError(null)
+  }, [sourceText])
+
   const applySourceText = useCallback(
     (
       loadHtml: (html: string) => void,
@@ -74,6 +80,7 @@ export function useSourceMode() {
     resetSource,
     showSourceSnapshot,
     updateSourceText,
+    markSourceClean,
     applySourceText,
   }
 }

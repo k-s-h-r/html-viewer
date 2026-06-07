@@ -9,15 +9,17 @@ interface History {
 
 export function useDocumentHistory() {
   const [history, setHistory] = useState<History>({ stack: [], index: -1 })
-  const [dirty, setDirty] = useState(false)
+  const [savedHtml, setSavedHtml] = useState<string | null>(null)
 
   const hasDocument = history.stack.length > 0
   const canUndo = history.index > 0
   const canRedo = history.index < history.stack.length - 1
+  const currentHtml = history.index >= 0 ? history.stack[history.index] : null
+  const dirty = currentHtml !== null && currentHtml !== savedHtml
 
   const resetHistory = useCallback((html: string) => {
     setHistory({ stack: [html], index: 0 })
-    setDirty(false)
+    setSavedHtml(html)
   }, [])
 
   const pushHistory = useCallback((cleanHtml: string) => {
@@ -27,7 +29,6 @@ export function useDocumentHistory() {
       const capped = base.slice(-HISTORY_LIMIT)
       return { stack: capped, index: capped.length - 1 }
     })
-    setDirty(true)
   }, [])
 
   const replaceCurrentHistory = useCallback((html: string) => {
@@ -39,6 +40,17 @@ export function useDocumentHistory() {
     })
   }, [])
 
+  const markClean = useCallback((html?: string) => {
+    if (html !== undefined) {
+      setSavedHtml(html)
+      return
+    }
+    setSavedHtml((currentSavedHtml) => {
+      const current = history.index >= 0 ? history.stack[history.index] : null
+      return current ?? currentSavedHtml
+    })
+  }, [history])
+
   const undo = useCallback((loadHtml: (html: string) => void) => {
     setHistory((prev) => {
       if (prev.index <= 0) return prev
@@ -46,7 +58,6 @@ export function useDocumentHistory() {
       requestAnimationFrame(() => loadHtml(prev.stack[nextIndex]))
       return { ...prev, index: nextIndex }
     })
-    setDirty(true)
   }, [])
 
   const redo = useCallback((loadHtml: (html: string) => void) => {
@@ -56,12 +67,11 @@ export function useDocumentHistory() {
       requestAnimationFrame(() => loadHtml(prev.stack[nextIndex]))
       return { ...prev, index: nextIndex }
     })
-    setDirty(true)
   }, [])
 
   return {
     dirty,
-    setDirty,
+    markClean,
     hasDocument,
     canUndo,
     canRedo,

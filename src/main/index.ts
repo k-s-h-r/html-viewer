@@ -40,6 +40,7 @@ const editorSessions = new Map<number, { pagePath: string }>();
 let recentFolders: RecentFolder[] = [];
 let zoomFactor = 1;
 let isStoppingForQuit = false;
+let documentNavigation: Promise<void> = Promise.resolve();
 function recentFoldersPath(): string {
   return path.join(app.getPath("userData"), "recent-folders.json");
 }
@@ -353,6 +354,77 @@ function firstNavigablePage(deck: Deck): string | null {
   return deck.pages.find((page) => page.kind === "page")?.href ?? null;
 }
 
+function isNavigationAborted(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+  const record = error as { errno?: number; code?: string };
+  return record.errno === -3 || record.code === "ERR_ABORTED";
+}
+
+async function runDocumentNavigation(task: () => Promise<void>): Promise<void> {
+  const run = async () => {
+    try {
+      await task();
+    } catch (error) {
+      if (!isNavigationAborted(error)) {
+        throw error;
+      }
+    }
+  };
+  const next = documentNavigation.then(run, run);
+  documentNavigation = next.catch(() => {});
+  return next;
+}
+
+async function loadDocumentUrl(url: string, reload = false): Promise<void> {
+  if (!documentView) {
+    return;
+  }
+  if (!reload && documentView.webContents.getURL() === url) {
+    return;
+  }
+  await runDocumentNavigation(async () => {
+    await documentView!.webContents.loadURL(url);
+  });
+}
+
+async function reloadDocumentView(): Promise<void> {
+  if (!documentView) {
+    return;
+  }
+
+  await runDocumentNavigation(async () => {
+    const webContents = documentView!.webContents;
+    await new Promise<void>((resolve, reject) => {
+      const onFinish = () => {
+        cleanup();
+        resolve();
+      };
+      const onFail = (
+        _event: Electron.Event,
+        errorCode: number,
+        errorDescription: string,
+        validatedURL: string
+      ) => {
+        cleanup();
+        if (isNavigationAborted({ errno: errorCode, code: errorDescription })) {
+          resolve();
+          return;
+        }
+        reject(new Error(`${errorDescription} (${errorCode}) loading '${validatedURL}'`));
+      };
+      const cleanup = () => {
+        webContents.removeListener("did-finish-load", onFinish);
+        webContents.removeListener("did-fail-load", onFail);
+      };
+      webContents.once("did-finish-load", onFinish);
+      webContents.once("did-fail-load", onFail);
+      webContents.reloadIgnoringCache();
+    });
+  });
+}
+
 async function loadHref(href: string): Promise<void> {
   if (!documentView || !localServer || !currentDeck) {
     return;
@@ -373,14 +445,12 @@ async function loadHref(href: string): Promise<void> {
     if (!fallback) {
       return;
     }
-    await documentView.webContents.loadURL(
-      localServer.toUrl(`${fallback.path}${parsed.hash}`)
-    );
+    await loadDocumentUrl(localServer.toUrl(`${fallback.path}${parsed.hash}`));
     return;
   }
 
   const { hash } = splitHref(href);
-  await documentView.webContents.loadURL(localServer.toUrl(`${page.path}${hash}`));
+  await loadDocumentUrl(localServer.toUrl(`${page.path}${hash}`));
 }
 
 function findDeckPageByPath(pagePath: string): DeckPage | undefined {
@@ -449,10 +519,29 @@ async function openEditorWindow(pagePath: string): Promise<void> {
 }
 
 function currentDocumentPagePath(): string | null {
-  if (!documentView) {
+  if (!documentView || !localServer) {
     return null;
   }
-  return navigationStateFromUrl(documentView.webContents.getURL()).pagePath ?? null;
+
+  const url = documentView.webContents.getURL();
+  if (!url.startsWith(localServer.origin)) {
+    return null;
+  }
+
+  return navigationStateFromUrl(url).pagePath ?? null;
+}
+
+async function refreshDocumentViewIfShowingPage(pagePath: string): Promise<void> {
+  if (!documentView || !localServer || currentDocumentPagePath() !== pagePath) {
+    return;
+  }
+
+  const currentUrl = documentView.webContents.getURL();
+  if (!currentUrl.startsWith(localServer.origin)) {
+    return;
+  }
+
+  await reloadDocumentView();
 }
 
 async function saveEditorPage(webContentsId: number, html: string): Promise<void> {
@@ -477,10 +566,7 @@ async function saveEditorPage(webContentsId: number, html: string): Promise<void
 
   await writeFile(filePath, html, "utf8");
   searchCatalog = await SearchCatalog.create(currentDeck.rootDir, currentDeck);
-
-  if (currentDocumentPagePath() === page.path) {
-    documentView?.webContents.reloadIgnoringCache();
-  }
+  await refreshDocumentViewIfShowingPage(page.path);
 }
 
 async function openFolderDialog(): Promise<Deck | null> {

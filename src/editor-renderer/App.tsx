@@ -86,7 +86,7 @@ export function App() {
     useState<FileSystemDirectoryHandle | null>(null)
   const {
     dirty,
-    setDirty,
+    markClean,
     hasDocument,
     canUndo,
     canRedo,
@@ -107,6 +107,7 @@ export function App() {
     resetSource,
     showSourceSnapshot,
     updateSourceText,
+    markSourceClean,
     applySourceText,
   } = useSourceMode()
 
@@ -148,13 +149,17 @@ export function App() {
         htmlHandle: meta.handle,
         projectDirHandle: meta.projectDirHandle ?? null,
       }
-      requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
         canvasRef.current?.loadHtml(html, {
           baseHref: meta.baseHref ?? null,
           clearMediaPreviews: true,
           hydrateContext,
         })
-      )
+        requestAnimationFrame(() => {
+          const normalized = canvasRef.current?.getCleanHtml()
+          if (normalized) resetHistory(normalized)
+        })
+      })
     },
     [resetHistory, resetSource]
   )
@@ -352,13 +357,17 @@ export function App() {
     try {
       if (hostMode) {
         await hostApi.savePage(html)
-        setDirty(false)
+        replaceCurrentHistory(html)
+        if (mode === "source") markSourceClean(html)
+        markClean(html)
         toast.success(`${fileName ?? "HTML"} に保存しました`)
         return
       }
       const res = await saveHtmlFile(html, handle, fileName ?? "仕様書.html")
       if (res.kind === "cancelled") return
-      setDirty(false)
+      replaceCurrentHistory(html)
+      if (mode === "source") markSourceClean(html)
+      markClean(html)
       if (res.kind === "overwritten") {
         if (res.handle) setHandle(res.handle)
         setFileName(res.name)
@@ -370,7 +379,17 @@ export function App() {
       toast.error("保存に失敗しました")
       console.error(err)
     }
-  }, [handle, hostApi, hostMode, fileName, mode, setDirty, sourceDirty])
+  }, [
+    handle,
+    hostApi,
+    hostMode,
+    fileName,
+    markSourceClean,
+    markClean,
+    mode,
+    replaceCurrentHistory,
+    sourceDirty,
+  ])
 
   const handleSaveAs = useCallback(async () => {
     if (mode === "source" && sourceDirty && !confirmSaveWithUnappliedSource())
@@ -380,13 +399,17 @@ export function App() {
     try {
       if (hostMode) {
         await hostApi.savePage(html)
-        setDirty(false)
+        replaceCurrentHistory(html)
+        if (mode === "source") markSourceClean(html)
+        markClean(html)
         toast.success(`${fileName ?? "HTML"} に保存しました`)
         return
       }
       const res = await saveAsHtmlFile(html, fileName ?? "仕様書.html")
       if (res.kind === "cancelled") return
-      setDirty(false)
+      replaceCurrentHistory(html)
+      if (mode === "source") markSourceClean(html)
+      markClean(html)
       if (res.kind === "overwritten") {
         if (res.handle) setHandle(res.handle)
         setFileName(res.name)
@@ -398,7 +421,16 @@ export function App() {
       toast.error("保存に失敗しました")
       console.error(err)
     }
-  }, [hostApi, hostMode, fileName, mode, setDirty, sourceDirty])
+  }, [
+    hostApi,
+    hostMode,
+    fileName,
+    markSourceClean,
+    markClean,
+    mode,
+    replaceCurrentHistory,
+    sourceDirty,
+  ])
 
   const handleUndo = useCallback(() => {
     undo((html) => canvasRef.current?.loadHtml(html))
@@ -449,9 +481,8 @@ export function App() {
       replaceCurrentHistory
     )
     if (normalized === null) return
-    setDirty(true)
     toast.success("ソースを適用しました")
-  }, [applySourceText, replaceCurrentHistory, setDirty])
+  }, [applySourceText, replaceCurrentHistory])
 
   // E2E テスト用フック(開発ビルドのみ)
   useEffect(() => {
