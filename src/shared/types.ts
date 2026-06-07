@@ -105,10 +105,13 @@ export interface ViewerApi {
   findInPage(request: FindRequest): Promise<void>;
   stopFindInPage(): Promise<void>;
   focusSearch(clickPoint?: InputPoint): Promise<void>;
+  focusDocument(): Promise<void>;
+  focusSidebar(): Promise<void>;
   onDeckChanged(callback: (deck: Deck) => void): () => void;
   onNavigationChanged(callback: (state: NavigationState) => void): () => void;
   onFindResult(callback: (result: FindResult) => void): () => void;
   onZoomChanged(callback: (factor: number) => void): () => void;
   onFocusSearch(callback: () => void): () => void;
   onUiFocusRestored(callback: () => void): () => void;
+  onDocumentEscape(callback: () => void): () => void;
 }

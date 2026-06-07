@@ -326,6 +326,18 @@ export default function App() {
   }, [applyDeck, focusSearchInput, updateRecentFolders]);
 
   useEffect(() => {
+    return window.viewerApi.onDocumentEscape(() => {
+      if (focusMode) {
+        setFocusMode(false);
+        return;
+      }
+      if (sidebarVisible) {
+        void window.viewerApi.focusSidebar();
+      }
+    });
+  }, [focusMode, sidebarVisible]);
+
+  useEffect(() => {
     reportViewBounds();
     const element = viewerHostRef.current;
     if (!element) {

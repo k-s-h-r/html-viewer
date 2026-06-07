@@ -56,9 +56,6 @@ export function TocSidebar({
 
   useEffect(() => {
     return window.viewerApi.onUiFocusRestored(() => {
-      if (!pendingRefocusRef.current) {
-        return;
-      }
       pendingRefocusRef.current = false;
       sidebarFocusedRef.current = true;
       refocusSelectedPage();
@@ -66,6 +63,33 @@ export function TocSidebar({
   }, [refocusSelectedPage]);
 
   const handleSidebarKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Enter") {
+      const button =
+        event.target instanceof HTMLElement
+          ? event.target.closest<HTMLButtonElement>("[data-reading-target]")
+          : null;
+      if (!button || button.disabled) {
+        return;
+      }
+      event.preventDefault();
+      sidebarFocusedRef.current = false;
+      pendingRefocusRef.current = false;
+
+      void (async () => {
+        if (button.dataset.pageId) {
+          const page = deck?.pages.find((candidate) => candidate.id === button.dataset.pageId);
+          if (page && canNavigate(page) && button.dataset.testid !== "selected-page-button") {
+            await onNavigateTo(page, page.href, false);
+          }
+        } else {
+          button.click();
+          await new Promise((resolve) => window.setTimeout(resolve, 0));
+        }
+        await window.viewerApi.focusDocument();
+      })();
+      return;
+    }
+
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
       return;
     }
@@ -136,6 +160,8 @@ export function TocSidebar({
                         }
                       }}
                       data-testid={isSelected ? "selected-page-button" : undefined}
+                      data-page-id={page.id}
+                      data-reading-target=""
                       onClick={() => {
                         pendingRefocusRef.current = true;
                         void onNavigateTo(page, page.href, true);
@@ -189,6 +215,7 @@ export function TocSidebar({
                           <button
                             key={anchor.id}
                             type="button"
+                            data-reading-target=""
                             onClick={() => void onNavigateTo(page, anchor.href, false)}
                             className={cn(
                               "truncate rounded-md px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-accent",

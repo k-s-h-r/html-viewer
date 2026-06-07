@@ -210,9 +210,25 @@ function focusRendererWebContents(): void {
   mainWindow.webContents.focus();
 }
 
-function restoreRendererFocusAfterNavigation(): void {
+function focusDocumentView(): void {
+  if (!documentView || !mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  if (process.platform === "darwin") {
+    app.focus({ steal: true });
+  }
+  mainWindow.focus();
+  documentView.webContents.focus();
+}
+
+function focusSidebarInRenderer(): void {
   focusRendererWebContents();
   sendToRenderer("viewer:ui-focus-restored", null);
+}
+
+function restoreRendererFocusAfterNavigation(): void {
+  focusSidebarInRenderer();
 }
 
 function finishRetainUiFocus(): void {
@@ -224,7 +240,7 @@ function finishRetainUiFocus(): void {
   setTimeout(restoreRendererFocusAfterNavigation, 0);
 }
 
-function registerDocumentFocusSearchShortcut(contents: Electron.WebContents): void {
+function registerDocumentKeyboardShortcuts(contents: Electron.WebContents): void {
   contents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") {
       return;
@@ -232,6 +248,11 @@ function registerDocumentFocusSearchShortcut(contents: Electron.WebContents): vo
     if ((input.control || input.meta) && input.key.toLowerCase() === "f") {
       event.preventDefault();
       setTimeout(() => focusSearchInRenderer(), 0);
+      return;
+    }
+    if (input.key === "Escape") {
+      event.preventDefault();
+      sendToRenderer("viewer:document-escape", null);
     }
   });
 }
@@ -284,7 +305,7 @@ function createDocumentView(): WebContentsView {
     pendingRetainUiFocus = false;
   });
 
-  registerDocumentFocusSearchShortcut(view.webContents);
+  registerDocumentKeyboardShortcuts(view.webContents);
 
   return view;
 }
@@ -443,6 +464,12 @@ ipcMain.handle("search:query", (_event, query: string, matchCase: boolean) => {
 ipcMain.handle("viewer:focus-search", (_event, clickPoint?: InputPoint) =>
   focusSearchInRenderer(clickPoint)
 );
+ipcMain.handle("viewer:focus-document", () => {
+  focusDocumentView();
+});
+ipcMain.handle("viewer:focus-sidebar", () => {
+  focusSidebarInRenderer();
+});
 ipcMain.handle("viewer:find-in-page", async (_event, request: FindRequest) => {
   if (!documentView || !request.query) {
     return;

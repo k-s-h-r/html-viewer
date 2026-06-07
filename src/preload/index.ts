@@ -43,6 +43,8 @@ const api: ViewerApi = {
   stopFindInPage: () => ipcRenderer.invoke("viewer:stop-find-in-page") as Promise<void>,
   focusSearch: (clickPoint?: InputPoint) =>
     ipcRenderer.invoke("viewer:focus-search", clickPoint) as Promise<void>,
+  focusDocument: () => ipcRenderer.invoke("viewer:focus-document") as Promise<void>,
+  focusSidebar: () => ipcRenderer.invoke("viewer:focus-sidebar") as Promise<void>,
   onDeckChanged: (callback: (deck: Deck) => void) => on("deck:changed", callback),
   onNavigationChanged: (callback: (state: NavigationState) => void) =>
     on("viewer:navigation-changed", callback),
@@ -51,7 +53,8 @@ const api: ViewerApi = {
   onZoomChanged: (callback: (factor: number) => void) =>
     on("viewer:zoom-changed", callback),
   onFocusSearch: (callback: () => void) => on("viewer:focus-search", callback),
-  onUiFocusRestored: (callback: () => void) => on("viewer:ui-focus-restored", callback)
+  onUiFocusRestored: (callback: () => void) => on("viewer:ui-focus-restored", callback),
+  onDocumentEscape: (callback: () => void) => on("viewer:document-escape", callback)
 };
 
 contextBridge.exposeInMainWorld("viewerApi", api);
